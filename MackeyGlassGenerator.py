@@ -1,0 +1,69 @@
+import matplotlib.pyplot as plt
+import numpy as np
+
+from collections import deque # for deque
+
+import datetime
+
+# Global variables
+    # speed
+move_speed = 0.1
+
+    # mackey glass params
+gamma = 1.0
+beta = 2.0
+tau = int(2 / move_speed)
+en = 10.65
+
+x_history = deque(maxlen=tau)
+
+def addToHistory(x):
+    x_history.append(x)
+
+def run():
+        # move data
+    x_pos = 1.0
+    x_pos_tau = 0.0
+
+        # record timesteps
+    sample_timer = 0
+
+        # sample for training
+    num_data_samples = 5000
+    current_sample = 0
+    data_samples = []
+
+    while True:
+        if len(x_history) >= tau:
+            x_pos_tau = x_history[0]
+
+        x_pos += move_speed * d_x(x_pos, x_pos_tau)
+
+        # store data
+        if sample_timer > 300:
+            data_samples.append(x_pos)
+            current_sample += 1
+            if current_sample >= num_data_samples:
+                print("DONE")
+                return data_samples
+
+        # record move history
+        addToHistory(x_pos)
+
+        sample_timer += 1
+
+def onExit(data):
+    # save the data
+    data_np = np.asarray(data)
+    np.savetxt("data_{}.txt".format(datetime.date.today()), data_np, delimiter=",")
+
+    # plot the data
+    plt.plot(range(len(data)), data)
+    plt.show()
+
+def d_x(x_t, x_t_tau):
+    return beta * (x_t_tau/(1+pow(x_t_tau, en))) - gamma * x_t
+
+if __name__ == "__main__":
+    data = run()
+    onExit(data)
