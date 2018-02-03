@@ -1,2 +1,1 @@
-# esn_experiments
-Experiments with Echo State Networks for Modelling Chaotic Time Series Data
+# Echo State Networks (ESNs) for Modelling Chaotic Time Series Data
