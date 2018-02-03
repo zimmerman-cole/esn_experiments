@@ -20,7 +20,7 @@ x_history = deque(maxlen=tau)
 def addToHistory(x):
     x_history.append(x)
 
-def run():
+def run(num_data_samples=5000):
         # move data
     x_pos = 1.0
     x_pos_tau = 0.0
@@ -29,7 +29,7 @@ def run():
     sample_timer = 0
 
         # sample for training
-    num_data_samples = 5000
+    #num_data_samples = 5000
     current_sample = 0
     data_samples = []
 
