@@ -1,7 +1,11 @@
+from collections import OrderedDict
 import torch
 import torch.nn as nn
 import torch.nn.functional as f
 from torch.autograd import Variable
+
+import matplotlib.pyplot as plt
+
 
 class FFNN(nn.Module):
     """
@@ -10,8 +14,8 @@ class FFNN(nn.Module):
     Args:
         input_size:             number of frames of context (data for previous time steps).
         hidden_size:            number of hidden units per hidden layer.
-        n_hidden_layers:        number of hidden layers.
-        activation:             pytorch activation.
+        n_hidden_layers:        number of hidden layers (not including input+output layers).
+        activation:             pytorch activation (class, NOT an instance)
     """
 
     def __init__(self, input_size, hidden_size, n_hidden_layers, activation=None):
@@ -21,43 +25,47 @@ class FFNN(nn.Module):
         self.n_hidden_layers = int(n_hidden_layers)
         
         if activation is None:
-            activation = nn.Sigmoid()
-        self.activation = activation
+            activation = nn.Sigmoid
+        else:
+            assert type(activation) == type, "Pass the TYPE of activation, not an instance of it."
         
-        self.layers = []
-        self.layers.append(nn.Linear(input_size, hidden_size)) # input layer
-        for i in range(n_hidden_layers):
+        layers = OrderedDict()
+        layers['linear1'] = nn.Linear(input_size, hidden_size) # input layer
+        layers['activ1'] = activation()
+        for i in range(2, n_hidden_layers+2):
             # add hidden layers
-            self.layers.append(nn.Linear(hidden_size, hidden_size))
+            k1, k2 = 'linear%d' % i, 'activ%d' % i
+            layers[k1] = nn.Linear(hidden_size, hidden_size)
+            layers[k2] = activation()
         
-        self.layers.append(nn.Linear(hidden_size, 1)) # output layer
+        out_key = 'linear%d' % (n_hidden_layers + 2)
+        layers[out_key] = nn.Linear(hidden_size, 1) # output layer
+        
+        self.model = nn.Sequential(layers)
 
     def forward(self, x):
-        out = x    
-        # forward-prop through input and hidden layers
-        for i in range(len(self.layers) - 1):
-            out = self.layers[i](out)
-            out = self.activation(out)
+        return self.model(x)
 
-        # fprop through output layer
-        out = self.layers[-1](out)
-        return out
-
-
-def train(model, train_data, batch_size, num_epochs, criterion, optimizer, valid_data=None):
+def train(model, train_data, batch_size, num_epochs, criterion, optimizer, valid_data=None, verbose=1):
     input_size = model.input_size
     assert (len(train_data) - input_size) % batch_size == 0, \
                 "there is leftover training data that doesn't fit neatly into a batch"
 
     n_iter = int((len(train_data) - input_size) / batch_size)
 
+    if valid_data is not None:
+        stats = torch.FloatTensor(num_epochs, 2)
+    else:
+        stats = torch.FloatTensor(num_epochs, 1)
+
     for epoch in range(num_epochs):
+        train_loss = 0.
         for i in range(0, n_iter, batch_size):
             inputs = torch.FloatTensor(batch_size, input_size)
-            targets = torch.FloatTensor(input_size)
-            for j in range(i, i+batch_size):
-                inputs[j] = torch.FloatTensor(train_data[j:(j+input_size)])
-                targets[j] = train_data[j+input_size]
+            targets = torch.FloatTensor(batch_size)
+            for batch_idx, j in enumerate(range(i, i+batch_size)):
+                inputs[batch_idx] = torch.FloatTensor(train_data[j:(j+input_size)])
+                targets[batch_idx] = train_data[j+input_size]
             inputs = Variable(inputs)
             targets = Variable(targets)
 
@@ -68,44 +76,65 @@ def train(model, train_data, batch_size, num_epochs, criterion, optimizer, valid
             loss.backward()
             optimizer.step()
 
-            if (i % 50) == 0:
-                print('='*50)
-                print('Epoch [%d/%d]' % (epoch+1, num_epochs))
-                print('Batch [%d/%d]' % (i+1, n_iter))
-                print('Training Loss: %.4f' % loss.data[0])
+            train_loss += loss.data[0]
+
+        if criterion.size_average:
+            train_loss /= float(n_iter)
+
+        stats[epoch, 0] = train_loss
+        if verbose:
+            print('='*50)
+            print('Epoch [%d/%d]' % (epoch+1, num_epochs))
+            print('Total training loss: %.4f' % train_loss)
 
         if valid_data is not None:
             valid_loss = 0.
             for i in range(len(valid_data) - input_size):
                 inputs = valid_data[i:(i+input_size)]
                 inputs = Variable(torch.FloatTensor(inputs))
-                target = Variable(torch.FloatTensor(valid_data[i+input_size]))
+                target = Variable(torch.FloatTensor([valid_data[i+input_size]]))
 
                 output = model(inputs)
-                valid_loss += criterion(output, target)
+                valid_loss += criterion(output, target).data[0]
 
             if criterion.size_average:
                 valid_loss /= (len(valid_data) - input_size)
-                print('Validation MSE: %.4f' % valid_loss)
-            else:
-                print('Validation total SE: %.4f' % valid_loss)
-                
+            
+            stats[epoch, 1] = valid_loss
+            if verbose:
+                print('Total validation loss: %.4f' % valid_loss)
 
-    return model
+    return model, stats
 
 
 if __name__ == "__main__":
-    from MackeyGlass.MackeyGlassGenerator import run
-    
-    data = run()
-    
-    model = FFNN(19, 50, 5)
+    from MackeyGlass.MackeyGlassGenerator import run 
+    data = run(num_data_samples=10000)
+    train_data = data[:7000]; valid_data = data[7000:]
+    model = FFNN(20, 50, 5)
     criterion = nn.MSELoss()
     optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
+    model, stats = train(model, train_data, 5, 100, criterion, optimizer, valid_data=valid_data, verbose=1)
+    train_losses = stats[:, 0].numpy()
+    valid_losses = stats[:, 1].numpy()
+    print('FOR SOME REASON, the training losses seem to increase with number of epochs (after 1st epoch),')
+    print('but validation errors decrease with number of epochs'.)
+    print('NOTE: validation error is calculated in "traditional" way, not where the NN feeds its')
+    print('      predictions back in as input for next time step.')
 
-    
+    f, (ax1, ax2) = plt.subplots(2, 1)
+    xs = range(len(train_losses))
+    ax1.plot(xs, train_losses)
+    ax1.set_title('Training loss per epoch')
+    ax1.set_xlabel('Epoch')
+    ax1.set_ylabel('Loss')
 
-    #train(model, 
+    xs = range(len(valid_losses))
+    ax2.plot(xs, valid_losses)
+    ax2.set_title('Validation loss per epoch')
+    ax2.set_xlabel('Epoch')
+    ax2.set_ylabel('Loss')
+    plt.show()
 
 
 
