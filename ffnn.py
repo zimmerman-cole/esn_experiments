@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as f
 from torch.autograd import Variable
+import numpy as np
 
 import matplotlib.pyplot as plt
 
@@ -106,7 +107,7 @@ def train(model, train_data, batch_size, num_epochs, criterion, optimizer, valid
 
     return model, stats
 
-def test(model, data):
+def test(model, data, sample_step=None, plot=True, show_error=True):
     """ Pass the trained model. """
     input_size = model.input_size
 
@@ -114,26 +115,40 @@ def test(model, data):
     output = model(Variable(torch.FloatTensor(inputs))).data[0]
     generated_data = [output]
     
-    for i in range(len(data) - input_size - 1):
-        inputs.extend([output]) # shift input
-        inputs = inputs[1:]     # data
+    for i in range(input_size, len(data)-1):
+        # every 'sample_step' iterations, feed the true value back in instead of generated value
+        if sample_step is not None and (i % sample_step) == 0:
+            inputs.extend([data[i]])
+            inputs = inputs[1:]
+        else:
+            inputs.extend([output]) # shift input
+            inputs = inputs[1:]     # data
 
         output = model(Variable(torch.FloatTensor(inputs))).data[0]
         generated_data.append(output)
 
-    xs = range(len(data) - input_size)
-    f, ax = plt.subplots()
-    #print(len(xs), len(data[input_size:]), len(generated_data))
-    ax.plot(xs, data[input_size:], label='True data')
-    ax.plot(xs, generated_data, label='Generated data')
-    plt.legend()
-    plt.show()
+    error = np.array(generated_data) - np.array(data[input_size:])
+    print('MSE: %.7f' % np.mean(error**2))
+    if plot:
+        xs = range(len(data) - input_size)
+        f, ax = plt.subplots()
+        ax.plot(xs, data[input_size:], label='True data')
+        ax.plot(xs, generated_data, label='Generated data')
+        if sample_step is not None:
+            smp_xs = np.arange(0, len(xs), sample_step)
+            smp_ys = [data[x+input_size] for x in smp_xs]
+            ax.scatter(smp_xs, smp_ys, label='sampling markers')
+        if show_error:
+            ax.plot(xs, error, label='error')
+            ax.plot(xs, [0]*len(xs), linestyle='--')
+        plt.legend()
+        plt.show()
 
 if __name__ == "__main__":
     from MackeyGlass.MackeyGlassGenerator import run 
     data = run(num_data_samples=12000)
     train_data = data[:7000]; valid_data = data[7000:]
-    model = FFNN(input_size=20, hidden_size=100, n_hidden_layers=3)
+    model = FFNN(input_size=50, hidden_size=100, n_hidden_layers=3, activation=None)
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.005)
     model, stats = train(model, train_data, 20, 100, criterion, optimizer, valid_data=None, verbose=1)
@@ -156,5 +171,5 @@ if __name__ == "__main__":
         plt.show()
 
     if 1:
-        test(model, valid_data[:100])
+        test(model, valid_data[:500], sample_step=10, show_error=0)
 
