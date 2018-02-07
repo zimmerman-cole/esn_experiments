@@ -48,8 +48,8 @@ class FFNN(nn.Module):
 
 def train(model, train_data, batch_size, num_epochs, criterion, optimizer, valid_data=None, verbose=1):
     input_size = model.input_size
-    assert (len(train_data) - input_size) % batch_size == 0, \
-                "there is leftover training data that doesn't fit neatly into a batch"
+    #assert (len(train_data) - input_size) % batch_size == 0, \
+    #            "there is leftover training data that doesn't fit neatly into a batch"
 
     n_iter = int((len(train_data) - input_size) / batch_size)
 
@@ -85,7 +85,7 @@ def train(model, train_data, batch_size, num_epochs, criterion, optimizer, valid
         if verbose:
             print('='*50)
             print('Epoch [%d/%d]' % (epoch+1, num_epochs))
-            print('Total training loss: %.4f' % train_loss)
+            print('Total training loss: %.7f' % train_loss)
 
         if valid_data is not None:
             valid_loss = 0.
@@ -102,39 +102,59 @@ def train(model, train_data, batch_size, num_epochs, criterion, optimizer, valid
             
             stats[epoch, 1] = valid_loss
             if verbose:
-                print('Total validation loss: %.4f' % valid_loss)
+                print('Total validation loss: %.7f' % valid_loss)
 
     return model, stats
 
+def test(model, data):
+    """ Pass the trained model. """
+    input_size = model.input_size
+
+    inputs = data[:input_size] # type(inputs) = list
+    output = model(Variable(torch.FloatTensor(inputs))).data[0]
+    generated_data = [output]
+    
+    for i in range(len(data) - input_size - 1):
+        inputs.extend([output]) # shift input
+        inputs = inputs[1:]     # data
+
+        output = model(Variable(torch.FloatTensor(inputs))).data[0]
+        generated_data.append(output)
+
+    xs = range(len(data) - input_size)
+    f, ax = plt.subplots()
+    #print(len(xs), len(data[input_size:]), len(generated_data))
+    ax.plot(xs, data[input_size:], label='True data')
+    ax.plot(xs, generated_data, label='Generated data')
+    plt.legend()
+    plt.show()
 
 if __name__ == "__main__":
     from MackeyGlass.MackeyGlassGenerator import run 
-    data = run(num_data_samples=10000)
+    data = run(num_data_samples=12000)
     train_data = data[:7000]; valid_data = data[7000:]
-    model = FFNN(20, 50, 5)
+    model = FFNN(input_size=20, hidden_size=100, n_hidden_layers=3)
     criterion = nn.MSELoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
-    model, stats = train(model, train_data, 5, 100, criterion, optimizer, valid_data=valid_data, verbose=1)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.005)
+    model, stats = train(model, train_data, 20, 100, criterion, optimizer, valid_data=None, verbose=1)
     train_losses = stats[:, 0].numpy()
-    valid_losses = stats[:, 1].numpy()
-    print('FOR SOME REASON, the training losses seem to increase with number of epochs (after 1st epoch),')
-    print('but validation errors decrease with number of epochs'.)
-    print('NOTE: validation error is calculated in "traditional" way, not where the NN feeds its')
-    print('      predictions back in as input for next time step.')
+    #valid_losses = stats[:, 1].numpy()
 
-    f, (ax1, ax2) = plt.subplots(2, 1)
-    xs = range(len(train_losses))
-    ax1.plot(xs, train_losses)
-    ax1.set_title('Training loss per epoch')
-    ax1.set_xlabel('Epoch')
-    ax1.set_ylabel('Loss')
+    if 0:
+        f, (ax1, ax2) = plt.subplots(2, 1)
+        xs = range(len(train_losses))
+        ax1.plot(xs, train_losses)
+        ax1.set_title('Training loss per epoch')
+        ax1.set_xlabel('Epoch')
+        ax1.set_ylabel('Loss')
 
-    xs = range(len(valid_losses))
-    ax2.plot(xs, valid_losses)
-    ax2.set_title('Validation loss per epoch')
-    ax2.set_xlabel('Epoch')
-    ax2.set_ylabel('Loss')
-    plt.show()
+        xs = range(len(valid_losses))
+        ax2.plot(xs, valid_losses)
+        ax2.set_title('Validation loss per epoch')
+        ax2.set_xlabel('Epoch')
+        ax2.set_ylabel('Loss')
+        plt.show()
 
-
+    if 1:
+        test(model, valid_data[:100])
 
