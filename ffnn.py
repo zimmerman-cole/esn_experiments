@@ -6,11 +6,13 @@ from torch.autograd import Variable
 
 import matplotlib.pyplot as plt
 
+import numpy as np
+
 
 class FFNN(nn.Module):
     """
     Feedforward neural network for modelling (chaotic) time series data.
-    
+
     Args:
         input_size:             number of frames of context (data for previous time steps).
         hidden_size:            number of hidden units per hidden layer.
@@ -23,12 +25,12 @@ class FFNN(nn.Module):
         self.input_size = int(input_size)
         self.hidden_size = int(input_size)
         self.n_hidden_layers = int(n_hidden_layers)
-        
+
         if activation is None:
             activation = nn.Sigmoid
         else:
             assert type(activation) == type, "Pass the TYPE of activation, not an instance of it."
-        
+
         layers = OrderedDict()
         layers['linear1'] = nn.Linear(input_size, hidden_size) # input layer
         layers['activ1'] = activation()
@@ -37,10 +39,10 @@ class FFNN(nn.Module):
             k1, k2 = 'linear%d' % i, 'activ%d' % i
             layers[k1] = nn.Linear(hidden_size, hidden_size)
             layers[k2] = activation()
-        
+
         out_key = 'linear%d' % (n_hidden_layers + 2)
         layers[out_key] = nn.Linear(hidden_size, 1) # output layer
-        
+
         self.model = nn.Sequential(layers)
 
     def forward(self, x):
@@ -64,8 +66,16 @@ def train(model, train_data, batch_size, num_epochs, criterion, optimizer, valid
             inputs = torch.FloatTensor(batch_size, input_size)
             targets = torch.FloatTensor(batch_size)
             for batch_idx, j in enumerate(range(i, i+batch_size)):
+                # inputs[batch_idx] = torch.FloatTensor(train_data[j:(j+input_size)])
                 inputs[batch_idx] = torch.FloatTensor(train_data[j:(j+input_size)])
                 targets[batch_idx] = train_data[j+input_size]
+
+            # shuffle the data
+            permutations = np.random.permutation(len(inputs))
+            for i,p in enumerate(permutations):
+                inputs[i, :] = inputs[p, :]
+                targets[i] = targets[p]
+
             inputs = Variable(inputs)
             targets = Variable(targets)
 
@@ -99,7 +109,7 @@ def train(model, train_data, batch_size, num_epochs, criterion, optimizer, valid
 
             if criterion.size_average:
                 valid_loss /= (len(valid_data) - input_size)
-            
+
             stats[epoch, 1] = valid_loss
             if verbose:
                 print('Total validation loss: %.4f' % valid_loss)
@@ -108,7 +118,7 @@ def train(model, train_data, batch_size, num_epochs, criterion, optimizer, valid
 
 
 if __name__ == "__main__":
-    from MackeyGlass.MackeyGlassGenerator import run 
+    from MackeyGlass.MackeyGlassGenerator import run
     data = run(num_data_samples=10000)
     train_data = data[:7000]; valid_data = data[7000:]
     model = FFNN(20, 50, 5)
@@ -118,7 +128,7 @@ if __name__ == "__main__":
     train_losses = stats[:, 0].numpy()
     valid_losses = stats[:, 1].numpy()
     print('FOR SOME REASON, the training losses seem to increase with number of epochs (after 1st epoch),')
-    print('but validation errors decrease with number of epochs'.)
+    print('but validation errors decrease with number of epochs.')
     print('NOTE: validation error is calculated in "traditional" way, not where the NN feeds its')
     print('      predictions back in as input for next time step.')
 
