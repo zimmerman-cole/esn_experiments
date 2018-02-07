@@ -23,7 +23,6 @@ class ESN():
         self.W_reservoir = []
         # self.__reservoir_norm_spectral_radius_norm_weights__()
         self.__reservoir_norm_spectral_radius_uniform_weights__()
-        self.W_reservoir -= 0.5
 
         self.W_out = []
 
@@ -99,11 +98,14 @@ class ESN():
         print("-"*10+"DATA PUT THROUGH RESERVOIR DONE."+"-"*10)
 
         # do linear regression between the inputs and the output
-        X_train = y_out[:-1]
-        y_target = data_train_y[1:]
-        # print(np.shape(X_train))
-        # print(np.shape(y_target))
-        lsq_result = np.linalg.lstsq(X_train, y_target)
+        X_train = y_out
+        y_target = data_train_y
+
+        reg = 1e-4
+        X_reg = np.vstack((X_train, np.eye(self.reservoir_size+self.input_size, self.reservoir_size+self.input_size)*reg))
+        y_reg = np.vstack((y_target, np.zeros((self.reservoir_size+self.input_size, 1))))
+
+        lsq_result = np.linalg.lstsq(X_reg, y_reg)
         self.W_out = lsq_result[0]
 
         print("-"*10+"LINEAR REGRESSION ON OUTPUT DONE."+"-"*10)

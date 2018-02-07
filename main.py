@@ -36,5 +36,5 @@ def ESN_stochastic_train(data, train_split, esn, num_runs, seed=None):
 
 if __name__ == "__main__":
     data = np.array([run(4000)]).T
-    esn = ESN(input_size=2, output_size=1, reservoir_size=1000, echo_param=0.3, spectral_scale=1.25, init_echo_timesteps=100)
+    esn = ESN(input_size=2, output_size=1, reservoir_size=1000, echo_param=0.26, spectral_scale=0.05, init_echo_timesteps=100)
     ESN_stochastic_train(data, 2000, esn, 1)
