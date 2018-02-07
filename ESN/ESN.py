@@ -18,10 +18,12 @@ class ESN():
         self.init_echo_timesteps = init_echo_timesteps # number of inititial runs before training
 
         # WEIGHTS
-        self.W_in = np.random.randn(input_size, reservoir_size)
+        self.W_in = np.random.randn(input_size, reservoir_size) - 0.5
 
         self.W_reservoir = []
-        self.__reservoir_norm_spectral_radius_norm_weights__()
+        # self.__reservoir_norm_spectral_radius_norm_weights__()
+        self.__reservoir_norm_spectral_radius_uniform_weights__()
+        self.W_reservoir -= 0.5
 
         self.W_out = []
 
@@ -31,6 +33,9 @@ class ESN():
 
     def __reservoir_norm_spectral_radius_norm_weights__(self):
         return self.__reservoir_norm_spectral_radius__(np.random.randn)
+
+    def __reservoir_norm_spectral_radius_uniform_weights__(self):
+        return self.__reservoir_norm_spectral_radius__(np.random.rand)
 
     def __reservoir_norm_spectral_radius_binary_weights__(self):
         def binary_distr(d0, d1):
@@ -45,9 +50,13 @@ class ESN():
         self.W_reservoir *= self.spectral_scale
 
     def __forward_to_res__(self, x_in):
-        # print(x_in)
+        assert np.shape(x_in)[1] == np.shape(self.W_in)[0], "input of {} does not match input weights of {}".format(np.shape(x_in)[1], np.shape(self.W_in)[0])
+
         in_to_res = np.dot(x_in, self.W_in).T
         res_to_res = np.dot(self.W_reservoir, self.reservoir_state)
+
+        assert np.shape(in_to_res) == np.shape(res_to_res), "in-to-res input is {} whereas res-to-res input is {}".format(np.shape(in_to_res), np.shape(res_to_res))
+
         self.reservoir_state = (
             (1.0 - self.echo_param)*self.reservoir_state +
             self.echo_param*self.activation_function(in_to_res + res_to_res)
@@ -58,32 +67,40 @@ class ESN():
     def forward_to_out(self, x_in):
         assert len(self.W_out) > 0, "ESN has not been trained yet!"
 
-        res_out = self.__forward_to_res__(x_in)
-        res_out = np.hstack((res_out, x_in, 1)) # augment the data with the reservoir data
+        res_out = np.array([self.__forward_to_res__(x_in)])
+        res_out = np.hstack((res_out, x_in)) # augment the data with the reservoir data
+
+        assert np.shape(res_out)[1] == np.shape(self.W_out)[0], "res output is {}, whereas expected weights are {}".format(np.shape(res_out), np.shape(self.W_out))
+
         res_to_out = np.dot(res_out, self.W_out)
 
         return res_to_out
 
-    def train(self, data):
+    def train(self, data_X, data_y):
+
+        # check that the data dimensions are the same as the input
+        assert np.shape(data_X)[1] == self.input_size, "input data is {}; expected input size is {}".format(np.shape(data_X)[1], self.input_size)
+
         # first we run the ESN for a few inputs so that the reservoir starts echoing
-        data_init = data[:self.init_echo_timesteps]
-        data_train = data[self.init_echo_timesteps:]
+        data_init = data_X[:self.init_echo_timesteps]
+        data_train_X = data_X[self.init_echo_timesteps:]
+        data_train_y = data_y[self.init_echo_timesteps:]
         for d in data_init:
             # print(d)
-            _ = self.__forward_to_res__(d)
+            _ = self.__forward_to_res__(np.array([d]))
         print("-"*10+"INITIAL ECHO TIMESTEPS DONE."+"-"*10)
 
-        # now train the reservoir after we have set up the echo state
-        y_out = np.zeros((np.shape(data_train)[0], self.reservoir_size+self.input_size+1))
-        for idx,d in enumerate(data_train):
-            y = self.__forward_to_res__(d)
-            y = np.hstack((y, d, 1)) # augment the data with the reservoir data
+        # now train the reservoir data after we have set up the echo state
+        y_out = np.zeros((np.shape(data_train_X)[0], self.reservoir_size+self.input_size))
+        for idx,d in enumerate(data_train_X):
+            y = self.__forward_to_res__(np.array([d]))
+            y = np.hstack((y, d)) # augment the data with the reservoir data
             y_out[idx, :] = y
         print("-"*10+"DATA PUT THROUGH RESERVOIR DONE."+"-"*10)
 
         # do linear regression between the inputs and the output
         X_train = y_out[:-1]
-        y_target = data_train[1:]
+        y_target = data_train_y[1:]
         # print(np.shape(X_train))
         # print(np.shape(y_target))
         lsq_result = np.linalg.lstsq(X_train, y_target)
@@ -96,7 +113,7 @@ class ESN():
         # We do not need to 'initialise' the ESN because the training phase already did this
         y_out = np.zeros((np.shape(data)[0], 1))
         for idx,d in enumerate(data):
-            y = self.forward_to_out(d)
+            y = self.forward_to_out(np.array([d]))
             y_out[idx, :] = y
 
         return y_out
