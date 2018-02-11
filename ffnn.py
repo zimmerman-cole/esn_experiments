@@ -3,16 +3,15 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as f
 from torch.autograd import Variable
-import numpy as np
 
+import numpy as np
 import matplotlib.pyplot as plt
-
-import numpy as np
 
 
 class FFNN(nn.Module):
     """
     Feedforward neural network for modelling (chaotic) time series data.
+    CURRENTLY ONLY WORKS FOR 1-DIMENSIONAL DATA.
 
     Args:
         input_size:             number of frames of context (data for previous time steps).
@@ -157,25 +156,23 @@ if __name__ == "__main__":
     optimizer = torch.optim.Adam(model.parameters(), lr=0.005)
     model, stats = train(model, train_data, 20, 100, criterion, optimizer, valid_data=None, verbose=1)
     train_losses = stats[:, 0].numpy()
-    valid_losses = stats[:, 1].numpy()
-    print('FOR SOME REASON, the training losses seem to increase with number of epochs (after 1st epoch),')
-    print('but validation errors decrease with number of epochs.')
-    print('NOTE: validation error is calculated in "traditional" way, not where the NN feeds its')
-    print('      predictions back in as input for next time step.')
+    if stats.shape[1] > 1:
+        valid_losses = stats[:, 1].numpy()
+    
+    if 0:
+        f, (ax1, ax2) = plt.subplots(2, 1)
+        xs = range(len(train_losses))
+        ax1.plot(xs, train_losses)
+        ax1.set_title('Training loss per epoch')
+        ax1.set_xlabel('Epoch')
+        ax1.set_ylabel('Loss')
 
-    f, (ax1, ax2) = plt.subplots(2, 1)
-    xs = range(len(train_losses))
-    ax1.plot(xs, train_losses)
-    ax1.set_title('Training loss per epoch')
-    ax1.set_xlabel('Epoch')
-    ax1.set_ylabel('Loss')
-
-    xs = range(len(valid_losses))
-    ax2.plot(xs, valid_losses)
-    ax2.set_title('Validation loss per epoch')
-    ax2.set_xlabel('Epoch')
-    ax2.set_ylabel('Loss')
-    plt.show()
+        xs = range(len(valid_losses))
+        ax2.plot(xs, valid_losses)
+        ax2.set_title('Validation loss per epoch')
+        ax2.set_xlabel('Epoch')
+        ax2.set_ylabel('Loss')
+        plt.show()
 
 
     #valid_losses = stats[:, 1].numpy()
@@ -196,5 +193,5 @@ if __name__ == "__main__":
         plt.show()
 
     if 1:
-        test(model, valid_data[:500], sample_step=10, show_error=0)
+        test(model, valid_data[:1000], sample_step=None, show_error=0)
 
