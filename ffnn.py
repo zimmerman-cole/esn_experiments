@@ -157,27 +157,6 @@ if __name__ == "__main__":
     optimizer = torch.optim.Adam(model.parameters(), lr=0.005)
     model, stats = train(model, train_data, 20, 100, criterion, optimizer, valid_data=None, verbose=1)
     train_losses = stats[:, 0].numpy()
-    valid_losses = stats[:, 1].numpy()
-    print('FOR SOME REASON, the training losses seem to increase with number of epochs (after 1st epoch),')
-    print('but validation errors decrease with number of epochs.')
-    print('NOTE: validation error is calculated in "traditional" way, not where the NN feeds its')
-    print('      predictions back in as input for next time step.')
-
-    f, (ax1, ax2) = plt.subplots(2, 1)
-    xs = range(len(train_losses))
-    ax1.plot(xs, train_losses)
-    ax1.set_title('Training loss per epoch')
-    ax1.set_xlabel('Epoch')
-    ax1.set_ylabel('Loss')
-
-    xs = range(len(valid_losses))
-    ax2.plot(xs, valid_losses)
-    ax2.set_title('Validation loss per epoch')
-    ax2.set_xlabel('Epoch')
-    ax2.set_ylabel('Loss')
-    plt.show()
-
-
     #valid_losses = stats[:, 1].numpy()
 
     if 0:
