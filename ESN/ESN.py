@@ -4,7 +4,8 @@ import matplotlib.pyplot as plt
 
 class ESN():
 
-    def __init__(self, input_size, output_size, reservoir_size=100, echo_param=0.6, spectral_scale=1.0, init_echo_timesteps=100):
+    def __init__(self, input_size, output_size, reservoir_size=100, echo_param=0.6, spectral_scale=1.0, init_echo_timesteps=100,
+                regulariser=1e-8, debug_mode=False):
 
         # ARCHITECTURE PARAMS
         self.input_size = input_size
@@ -17,6 +18,7 @@ class ESN():
         self.reservoir_state = np.zeros((1, self.reservoir_size))
         self.echo_param = echo_param
         self.init_echo_timesteps = init_echo_timesteps # number of inititial runs before training
+        self.regulariser = regulariser
 
         # WEIGHTS
         self.W_in = np.random.randn(input_size, reservoir_size) - 0.5
@@ -29,8 +31,10 @@ class ESN():
 
         self.W_out = []
 
-        print("W_in: {}".format(self.W_in[:10]))
-        print("W_res: {}".format(self.W_reservoir))
+        self.debug = debug_mode
+
+        if self.debug: print("W_in: {}".format(self.W_in[:10]))
+        if self.debug: print("W_res: {}".format(self.W_reservoir))
 
 
     def copy(self):
@@ -50,9 +54,9 @@ class ESN():
             return (np.random.rand(d0, d1) + 0.5).astype(int)
         return self.__reservoir_norm_spectral_radius__(binary_distr)
 
-    def __reservoir_norm_spectral_radius__(self, weight_distribution_function):
+    def __reservoir_norm_spectral_radius__(self, weight_distribution_function, offset=0.5):
         # self.W_reservoir = np.random.rand(reservoir_size, reservoir_size)
-        self.W_reservoir = weight_distribution_function(self.reservoir_size, self.reservoir_size)-0.5
+        self.W_reservoir = weight_distribution_function(self.reservoir_size, self.reservoir_size) - offset
         # make the spectral radius < 1 by dividing by the absolute value of the largest eigenvalue.
         self.W_reservoir /= max(abs(np.linalg.eig(self.W_reservoir)[0]))
         self.W_reservoir *= self.spectral_scale
@@ -65,10 +69,8 @@ class ESN():
 
         assert np.shape(in_to_res) == np.shape(res_to_res), "in-to-res input is {} whereas res-to-res input is {}".format(np.shape(in_to_res), np.shape(res_to_res))
 
-        self.reservoir_state = (
-            (1.0 - self.echo_param)*self.reservoir_state +
-            self.echo_param*self.activation_function(in_to_res + res_to_res)
-        )
+        self.reservoir_state = (1.0 - self.echo_param)*self.reservoir_state + self.echo_param*self.activation_function(in_to_res + res_to_res)
+        
         #res_to_out = np.dot(self.reservoir_state, self.W_out)
         return self.reservoir_state.flatten()
 
@@ -114,21 +116,20 @@ class ESN():
         # do linear regression between the inputs and the output
         X_train = y_out
         y_target = data_train_y
-        print("y: {}".format((y_target)))
-        print("x: {}".format((X_train)))
 
-        reg = 1e-8
-        X_reg = np.vstack((X_train, np.eye(self.reservoir_size+self.input_size, self.reservoir_size+self.input_size)*reg))
-        y_reg = np.vstack((y_target, np.zeros((self.reservoir_size+self.input_size, 1))))
-        #X_reg = X_train
-        #y_reg = y_target
+        if self.debug: print("y: {}".format((y_target)))
+        if self.debug: print("x: {}".format((X_train)))
 
-        #lsq_result = np.linalg.lstsq(X_reg, y_reg)
-        lsq_result = np.dot(np.dot(y_reg.T, X_reg), np.linalg.inv(np.dot(X_reg.T,X_reg) + \
-                        reg*np.eye(self.input_size+self.reservoir_size)))
+        # X_reg = np.vstack((X_train, np.eye(self.reservoir_size+self.input_size)*self.regulariser))
+        # y_reg = np.vstack((y_target, np.zeros((self.reservoir_size+self.input_size, 1))))
+
+        # lsq_result = np.linalg.lstsq(X_reg, y_reg)
+        lsq_result = np.dot(np.dot(y_target.T, X_train), np.linalg.inv(np.dot(X_train.T,X_train) + \
+                        self.regulariser*np.eye(self.input_size+self.reservoir_size)))
         self.W_out = lsq_result[0]
+        print(self.W_out)
 
-        print("W_out: {}".format(self.W_out))
+        if self.debug: print("W_out: {}".format(self.W_out))
 
         print("-"*10+"LINEAR REGRESSION ON OUTPUT DONE."+"-"*10)
         print("ESN trained!")
@@ -156,56 +157,35 @@ class ESN():
     def generate(self, data, sample_step=None, plot=True, show_error=True):
         """ Pass the trained model. """
         # reset the reservoir
-        #self.reset_reservoir()
+        self.reset_reservoir()
 
         input_size = self.input_size-1 # -1 because of bias
 
-        inputs = data[:input_size, 0] # type(inputs) = list
-        # output = model(Variable(torch.FloatTensor(inputs))).data[0]
-        #print("in: {}".format(inputs))
-        d_bias = np.hstack(([inputs], np.ones((1,1))))
-        #print(d_bias)
-        output = self.predict(d_bias)
-        #print(output)
-        generated_data = [output[0][0]]
+        generated_data = []
+        for i in range(0, len(data)-input_size):
+            # run after the reservoir has "warmed-up"
+            if i >= self.init_echo_timesteps:
+                inputs = np.hstack((inputs, output[0]))
+                inputs = inputs[1:]
+                d_bias = np.hstack(([inputs], np.ones((1,1))))
 
-        for i in range(input_size, len(data)-input_size):
-            #if i > self.init_echo_timesteps:
-                #print('out_before: {}'.format(output))
-                #inputs = np.hstack((output[0], data[i:(i+input_size-1), 0]))
-            inputs = np.hstack((inputs, output[0]))
-            inputs = inputs[1:]
-            d_bias = np.hstack(([inputs], np.ones((1,1))))
-            output = self.predict(d_bias)
-                #print('out: {}'.format(output[0]))
-            generated_data.append(output[0][0])
-    
-        # for i in range(input_size, len(data)-1):
+                output = self.predict(d_bias)
+                generated_data.append(output[0][0])
+            # "warm-up" the reservoir
+            else:
+                inputs = data[i:(i+input_size), 0]
+                d_bias = np.hstack(([inputs], np.ones((1,1))))
+                output = self.predict(d_bias)
 
-        #     # sample after the warm-up phase
-        #     if i > self.init_echo_timesteps:
-        #         # every 'sample_step' iterations, feed the true value back in instead of generated value
-        #         if sample_step is not None and (i % sample_step) == 0:
-        #             # print(data[i])
-        #             inputs = np.hstack((inputs, np.array([data[i, :]])))
-        #             inputs = inputs[:, 1:]
-        #         else:
-        #             inputs = np.hstack((inputs, output)) # shift input
-        #             inputs = inputs[:, 1:]     # data
-
-        #         # output = model(Variable(torch.FloatTensor(inputs))).data[0]
-        #         output = self.predict(np.hstack((inputs, np.ones((1,1)))))
-        #         generated_data.append(output[0][0])
-
-        error = np.array(generated_data) - data[(input_size+self.init_echo_timesteps):]
-        print('MSE: %.7f' % np.mean(error**2))
+        error = np.array(generated_data) - data[(self.init_echo_timesteps):-input_size]
+        print('MSE generating test: %.7f' % np.mean(error**2))
         if plot:
             xs = range(np.shape(data[self.init_echo_timesteps:])[0] - input_size)
             f, ax = plt.subplots()
-            print(np.shape(xs))
-            print(np.shape(data[(input_size+self.init_echo_timesteps):, 0]))
+            # print(np.shape(xs))
+            # print(np.shape(data[(input_size+self.init_echo_timesteps):, 0]))
             #ax.plot(xs, data[(input_size+self.init_echo_timesteps):, 0], label='True data')
-            ax.plot(range(len(generated_data)), data[:len(generated_data), 0], label='True data')
+            ax.plot(range(len(generated_data)), data[self.init_echo_timesteps:-input_size, 0], label='True data')
             ax.plot(range(len(generated_data)), generated_data, label='Generated data')
             # if sample_step is not None:
             #     smp_xs = np.arange(0, len(xs), sample_step)
