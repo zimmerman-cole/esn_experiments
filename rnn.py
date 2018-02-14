@@ -8,32 +8,81 @@ import torch.optim as optim
 import numpy as np
 import matplotlib.pyplot as plt
 
-class LSTMNN(nn.Module):
-    """ doc """
+class LSTM(nn.Module):
+    """ 
+     input_size: Data dimensionality (i.e. MackeyGlass: 1).
+    hidden_size: Number of features in each hidden state, h.
+       n_layers: Number of recurrent layers.
+    """
 
-    def __init__(self, input_size, hidden_size, n_rec_layers=1, activation=None):
+    def __init__(self, input_size, hidden_size, n_layers=1):
         super(LSTM, self).__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
-        self.n_layers = n_rec_layers
-        if activation is None:
-            activation == nn.Sigmoid
+        self.n_layers = n_layers
 
-        self.layers = OrderedDict()
-        self.layers['linear_in'] = nn.Linear(input_size, hidden_size)
-        self.layers['activ_in'] = activation()
-        for i in range(n_rec_layers):
-            self.layers['lstm%d' % (i+1)] = nn.LSTMCell(hidden_size, hidden_size)
+        self.rnn = nn.LSTM(input_size, hidden_size, n_layers)
+        self.linear_out = nn.Linear(hidden_size, input_size)
 
-        self.layers['linear_out'] = nn.Linear(hidden_size, input_size)
+    def forward(self, inputs, predict_timesteps=0):
+        """
+        Set predict_timesteps = the number of timesteps you would like to predict/generate 
+            after training on the training data 'inputs'.
+        """
+        # inputs.size(): (seq_len, input_size)
+        outputs, (h_n, c_n) = self.rnn(inputs)
+        seq_len, batch_size, hidden_size = outputs.shape
         
+        # reshape outputs to be put through linear layer
+        outputs = outputs.view(seq_len*batch_size, hidden_size)
+        outputs = self.linear_out(outputs).view(seq_len, batch_size, self.input_size)
 
-    def forward(self, inputs):
-        # inputs.size(): (batch_size, input_size)
-        outputs = []
+        if not predict_timesteps:
+            return outputs
         
+        output = outputs[-1, -1, :]
+        print(output.shape)
+        for i in range(future):
+            pass#future_outputs, (h_n, c_n) = self.rnn(
 
+if __name__ == '__main__':
+    from MackeyGlass.MackeyGlassGenerator import run
+    data = run(1000) 
+    
+    train_data = np.array(data[:500]).reshape(-1, 1, 1)
+    test_data = np.array(data[500:]).reshape(-1, 1, 1)
+    # CONSTRUCT TRAINING, TESTING DATA
+    print(type(torch.from_numpy(train_data[:-1])))
+    train_inputs = Variable(torch.from_numpy(train_data[:-1]), requires_grad=0)
+    train_targets = Variable(torch.from_numpy(train_data[1:]), requires_grad=0)
+    test_inputs = Variable(torch.from_numpy(test_data[:-1]), requires_grad=0)
+    test_targets = Variable(torch.from_numpy(test_data[1:]), requires_grad=0)
 
+    rnn = LSTM(1, 51, n_layers=2)
+    criterion = nn.MSELoss()
+    optimizer = optim.Adam(rnn.parameters(), lr=0.005)
+
+    for epoch in range(300):
+        print('Epoch [%d/100]' % (epoch+1))
+        
+        # calculate outputs, loss, then step
+        optimizer.zero_grad()
+        train_outputs = rnn(train_inputs)
+        loss = criterion(train_outputs, train_targets)
+        print('Training loss: %.6f' % loss.data.numpy()[0])
+        loss.backward()
+        optimizer.step()
+
+        test_outputs = rnn(test_inputs, predict_timesteps=0)
+        loss = criterion(test_outputs, test_targets)
+        print('Test loss: %.6f' % loss.data.numpy()[0])
+
+    f, ax = plt.subplots(figsize=(12, 12))
+    # plot true test target values
+    out_plt = test_outputs.data.numpy(); tar_plt = test_targets.data.numpy()
+    ax.plot(np.arange(len(out_plt)), tar_plt, label='True')
+    ax.plot(np.arange(len(out_plt)), out_plt, label='Generated')
+    plt.legend(); plt.show()
 
 class Sequence(nn.Module):
     
@@ -104,8 +153,6 @@ def try_toy_example():
     plt.legend(); plt.show()
 
 
-if __name__ == '__main__':
-    try_toy_example()
 
 
 
