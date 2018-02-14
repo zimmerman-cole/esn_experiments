@@ -40,10 +40,18 @@ class LSTM(nn.Module):
         if not predict_timesteps:
             return outputs
         
-        output = outputs[-1, -1, :]
-        print(output.shape)
-        for i in range(future):
-            pass#future_outputs, (h_n, c_n) = self.rnn(
+        input_t = outputs[-1, -1, :].view(1, 1, self.input_size)
+        generated_outputs = []
+        for i in range(predict_timesteps):
+            output_t, (h_n, c_n) = self.rnn(input_t, (h_n, c_n))
+            output_t = output_t.view(1, hidden_size)
+            output_t = self.linear_out(output_t).view(1, 1, self.input_size)
+            generated_outputs.append(output_t.data.numpy()[0, 0, :])
+
+            input_t = output_t
+        
+        generated_outputs = np.array(generated_outputs).reshape(predict_timesteps, self.input_size)
+        return outputs, Variable(torch.FloatTensor(generated_outputs))
 
 if __name__ == '__main__':
     from MackeyGlass.MackeyGlassGenerator import run
@@ -52,37 +60,65 @@ if __name__ == '__main__':
     train_data = np.array(data[:500]).reshape(-1, 1, 1)
     test_data = np.array(data[500:]).reshape(-1, 1, 1)
     # CONSTRUCT TRAINING, TESTING DATA
-    print(type(torch.from_numpy(train_data[:-1])))
-    train_inputs = Variable(torch.from_numpy(train_data[:-1]), requires_grad=0)
-    train_targets = Variable(torch.from_numpy(train_data[1:]), requires_grad=0)
-    test_inputs = Variable(torch.from_numpy(test_data[:-1]), requires_grad=0)
-    test_targets = Variable(torch.from_numpy(test_data[1:]), requires_grad=0)
+    train_inputs = Variable(torch.from_numpy(train_data[:-1]).float(), requires_grad=0)
+    train_targets = Variable(torch.from_numpy(train_data[1:]).float(), requires_grad=0)
+    test_inputs = Variable(torch.from_numpy(test_data[:-1]).float(), requires_grad=0)
+    test_targets = Variable(torch.from_numpy(test_data[1:]).float(), requires_grad=0)
 
     rnn = LSTM(1, 51, n_layers=2)
     criterion = nn.MSELoss()
     optimizer = optim.Adam(rnn.parameters(), lr=0.005)
 
-    for epoch in range(300):
-        print('Epoch [%d/100]' % (epoch+1))
+    n_epochs = 200
+    stats = np.zeros((n_epochs, 2))
+    for epoch in range(n_epochs):
+        print('Epoch [%d/%d] ===================' % (epoch+1, n_epochs))
         
         # calculate outputs, loss, then step
         optimizer.zero_grad()
         train_outputs = rnn(train_inputs)
         loss = criterion(train_outputs, train_targets)
+        stats[epoch, 0] = loss.data.numpy()[0]
         print('Training loss: %.6f' % loss.data.numpy()[0])
         loss.backward()
         optimizer.step()
 
         test_outputs = rnn(test_inputs, predict_timesteps=0)
         loss = criterion(test_outputs, test_targets)
+        stats[epoch, 1] = loss.data.numpy()[0]
         print('Test loss: %.6f' % loss.data.numpy()[0])
 
-    f, ax = plt.subplots(figsize=(12, 12))
-    # plot true test target values
-    out_plt = test_outputs.data.numpy(); tar_plt = test_targets.data.numpy()
-    ax.plot(np.arange(len(out_plt)), tar_plt, label='True')
-    ax.plot(np.arange(len(out_plt)), out_plt, label='Generated')
-    plt.legend(); plt.show()
+    # FINAL EPOCH: try generating data as well ====================================
+    print('Training finished: running generation tests now.')
+    train_outputs, generated_outputs = rnn(train_inputs, predict_timesteps=len(test_data))
+    generated_test_loss = criterion(Variable(torch.from_numpy(test_data)), generated_outputs.double())
+    print('MSE loss for generated data: %.6f' % generated_test_loss)
+
+    if 1:
+        f, ax = plt.subplots(figsize=(12, 12))
+        # plot true test target values
+        outputs_plt = test_outputs.data.numpy().squeeze()
+        targets_plt = test_targets.data.numpy().squeeze()
+        xs = np.arange(len(outputs_plt))
+        ax.plot(xs, targets_plt, label='True')
+        ax.plot(xs, outputs_plt, label='Model')
+        ax.set_title('Test outputs; true vs. predicted (no generation)')
+        plt.legend(); plt.show()
+    if 1:
+        f, ax = plt.subplots(figsize=(12, 12))
+        xs = np.arange(n_epochs)
+        ax.plot(xs, stats[:, 0], label='Training loss')
+        ax.plot(xs, stats[:, 1], label='Test loss')
+        plt.legend(); plt.show()
+    if 1:
+        generated_plt = generated_outputs.data.numpy().squeeze()
+        test_plt = test_data.squeeze()
+        f, ax = plt.subplots(figsize=(12, 12))
+        xs = np.arange(len(test_plt))
+        ax.plot(xs, test_plt, label='True data')
+        ax.plot(xs, generated_plt, label='Generated data')
+        plt.legend(); plt.show()
+
 
 class Sequence(nn.Module):
     
