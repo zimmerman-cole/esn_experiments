@@ -52,18 +52,26 @@ def run(num_data_samples=5000):
 
         sample_timer += 1
 
-def onExit(data):
+def onExit(data, plot2d=False):
     # save the data
     data_np = np.asarray(data)
     np.savetxt("data_{}.txt".format(datetime.date.today()), data_np, delimiter=",")
 
     # plot the data
-    plt.plot(range(len(data)), data)
-    plt.show()
+    if plot2d:
+        x_minus_tau = data[:-tau]
+        x_ = data[tau:]
+        plt.plot(x_, x_minus_tau, linewidth=0.2)
+        plt.xlabel("x(t)")
+        plt.ylabel("x(t-tau)")
+        plt.show()
+    else:
+        plt.plot(range(len(data)), data)
+        plt.show()
 
 def d_x(x_t, x_t_tau):
     return beta * (x_t_tau/(1+pow(x_t_tau, en))) - gamma * x_t
 
 if __name__ == "__main__":
-    data = run()
-    onExit(data)
+    data = run(num_data_samples=8000)
+    onExit(data, plot2d=True)
