@@ -50,9 +50,10 @@ def ESN_stochastic_train(data, train_split, esn, num_runs, seed=None):
         esn_copy = esn.copy()
         esn_copy.train(data_train_X, data_train_y)
 
-        plt.bar(range(esn_copy.input_size+esn.reservoir_size), esn_copy.W_out)
-        plt.title("Output Weights")
-        plt.show()
+        if esn_copy.debug:
+            plt.bar(range(esn_copy.input_size+esn.reservoir_size), esn_copy.W_out)
+            plt.title("Output Weights")
+            plt.show()
 
         y_pred_test = esn_copy.predict(data_test_X)
         # plt.plot(range(len(y_pred_test)), y_pred_test)
@@ -67,18 +68,64 @@ def ESN_stochastic_train(data, train_split, esn, num_runs, seed=None):
         print("iter: {} -- Mean L2 Error TEST: {}, TRAIN: {}".format(e, mse_test, mse_train))
         # print("iter: {} -- Mean L2 Error TEST: {}".format(e, mse_test))
 
-        esn_copy.generate(data_test[:1000])
+        gen_err, generated_data = esn_copy.generate(data_test[:1000], plot=False)
+
+    #g_data = [generated_data, generated_data, generated_data, generated_data]
+    #d = data_test[(esn_copy.init_echo_timesteps+esn_copy.input_size-1):1000, 0]
+    #a_data = [d, d, d, d]
+    #fancy_plot(g_data, a_data, 2, 2)
 
     mean_mse_test /= num_runs
     mean_mse_train /= num_runs
     print("\n\nFINAL -- Mean L2 Error TEST: {}, TRAIN: {}".format(mean_mse_test, mean_mse_train))
 
+    return gen_err, generated_data, data_test[(esn_copy.init_echo_timesteps+esn_copy.input_size-1):1000,0]
+
+def fancy_plot(generated_data, actual_data, num_rows, num_cols, titles=[]):
+    # generated data and actual data should be lists of data sets so that subplots can be made
+    f, ax = plt.subplots(num_rows, num_cols, sharex=True, sharey=True)
+
+    for r in range(num_rows):
+        for c in range(num_cols):
+            idx = r*num_cols + c
+            g_data = generated_data[idx]
+            a_data = actual_data[idx]
+            ax[r,c].plot(range(len(g_data)), a_data, label='True data', c='red')
+            ax[r,c].scatter(range(len(g_data)), a_data, s=4.5, c='black', alpha=0.5) 
+            ax[r,c].plot(range(len(g_data)), g_data, label='Generated data', c='blue')
+            ax[r,c].scatter(range(len(g_data)), g_data, s=4.5, c='black', alpha=0.5)
+
+            if len(titles) > 0:
+                ax[r, c].set_title(titles[idx])
+
+    plt.legend()
+    plt.show()
 
 if __name__ == "__main__":
     data = np.array([run(12000)]).T
     data -= np.mean(data)
     print(np.std(data))
-    data /= np.std(data)
-    onExit(data)
-    esn = ESN(input_size=2, output_size=1, reservoir_size=1000, echo_param=0.5, spectral_scale=1.25, init_echo_timesteps=100, regulariser=1e-8, debug_mode=True)
-    ESN_stochastic_train(data, 7000, esn, 1)
+    #data /= np.std(data)
+    #onExit(data)
+    #esn = ESN(input_size=2, output_size=1, reservoir_size=1000, echo_param=0.1, spectral_scale=1.1, init_echo_timesteps=100, regulariser=1e-0, debug_mode=True)
+    #ESN_stochastic_train(data, 7000, esn, 1)
+
+    g_data = []
+    a_data = []
+    titles = []
+    # run a few test of different hyperparameters
+    for e in np.linspace(0, 1, 16):
+        esn = ESN(input_size=2, output_size=1, reservoir_size=1000, echo_param=e, spectral_scale=1.1, init_echo_timesteps=100, regulariser=1e-0, debug_mode=False)
+        gen_err, g_, a_ = ESN_stochastic_train(data, 7000, esn, 1)
+        g_data.append(g_)
+        a_data.append(a_)
+        titles.append(("ECHO PARAM: {}:".format(e)))
+
+    fancy_plot(g_data, a_data, 4, 4, titles=titles)
+
+
+
+
+
+
+

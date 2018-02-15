@@ -21,7 +21,8 @@ class ESN():
         self.regulariser = regulariser
 
         # WEIGHTS
-        self.W_in = (np.random.randn(input_size, reservoir_size) - 0.5)*(1/100.)
+        #self.W_in = (np.random.randn(input_size, reservoir_size) - 0.5)*(1/1000.)
+        self.W_in = ((np.random.rand(input_size, reservoir_size) > 0.5).astype(int) - 0.5) * (1/100.)
 
         self.W_reservoir = []
         # self.__reservoir_norm_spectral_radius_norm_weights__()
@@ -178,16 +179,19 @@ class ESN():
                 d_bias = np.hstack(([inputs], np.ones((1,1))))
                 output = self.predict(d_bias)
 
-        error = np.array(generated_data) - data[(self.init_echo_timesteps):-input_size]
-        print('MSE generating test: %.7f' % np.mean(error**2))
+        error = np.mean((np.array(generated_data) - data[(self.init_echo_timesteps+input_size):])**2)
+        print('MSE generating test: %.7f' % error)
+        print(error)
         if plot:
             xs = range(np.shape(data[self.init_echo_timesteps:])[0] - input_size)
             f, ax = plt.subplots()
             # print(np.shape(xs))
             # print(np.shape(data[(input_size+self.init_echo_timesteps):, 0]))
             #ax.plot(xs, data[(input_size+self.init_echo_timesteps):, 0], label='True data')
-            ax.plot(range(len(generated_data)), data[self.init_echo_timesteps:-input_size, 0], label='True data')
-            ax.plot(range(len(generated_data)), generated_data, label='Generated data')
+            ax.plot(range(len(generated_data)), data[(self.init_echo_timesteps+input_size):, 0], label='True data', c='red')
+            ax.scatter(range(len(generated_data)), data[(self.init_echo_timesteps+input_size):, 0], s=4.5, c='black', alpha=0.5) 
+            ax.plot(range(len(generated_data)), generated_data, label='Generated data', c='blue')
+            ax.scatter(range(len(generated_data)), generated_data, s=4.5, c='black', alpha=0.5)
             # if sample_step is not None:
             #     smp_xs = np.arange(0, len(xs), sample_step)
             #     smp_ys = [data[x+input_size] for x in smp_xs]
@@ -197,6 +201,8 @@ class ESN():
             #     ax.plot(xs, [0]*len(xs), linestyle='--')
             plt.legend()
             plt.show()
+
+        return error, generated_data
 
 
     def mean_l2_error(self, y_out, y_pred):
