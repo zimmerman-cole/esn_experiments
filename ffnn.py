@@ -3,15 +3,16 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as f
 from torch.autograd import Variable
+import numpy as np
+
+import matplotlib.pyplot as plt
 
 import numpy as np
-import matplotlib.pyplot as plt
 
 
 class FFNN(nn.Module):
     """
     Feedforward neural network for modelling (chaotic) time series data.
-    CURRENTLY ONLY WORKS FOR 1-DIMENSIONAL DATA.
 
     Args:
         input_size:             number of frames of context (data for previous time steps).
@@ -91,22 +92,27 @@ def train(model, train_data, batch_size, num_epochs, criterion, optimizer, valid
             print('Epoch [%d/%d]' % (epoch+1, num_epochs))
             print('Total training loss: %.7f' % train_loss)
 
+        test_generating_loss = test(model, train_data, plot=False)
+        print("Training Loss (Generating): {:.7f}".format(test_generating_loss))
+
         if valid_data is not None:
-            valid_loss = 0.
-            for i in range(len(valid_data) - input_size):
-                inputs = valid_data[i:(i+input_size)]
-                inputs = Variable(torch.FloatTensor(inputs))
-                target = Variable(torch.FloatTensor([valid_data[i+input_size]]))
+            # valid_loss = 0.
+            # for i in range(len(valid_data) - input_size):
+            #     inputs = valid_data[i:(i+input_size)]
+            #     inputs = Variable(torch.FloatTensor(inputs))
+            #     target = Variable(torch.FloatTensor([valid_data[i+input_size]]))
 
-                output = model(inputs)
-                valid_loss += criterion(output, target).data[0]
+            #     output = model(inputs)
+            #     valid_loss += criterion(output, target).data[0]
 
-            if criterion.size_average:
-                valid_loss /= (len(valid_data) - input_size)
+            # if criterion.size_average:
+            #     valid_loss /= (len(valid_data) - input_size)
 
-            stats[epoch, 1] = valid_loss
-            if verbose:
-                print('Total validation loss: %.7f' % valid_loss)
+            # stats[epoch, 1] = valid_loss
+            # if verbose:
+            #     print('Total validation loss: %.7f' % valid_loss)
+            stats[epoch, 1] = test(model, valid_data, plot=False)
+            print("Validation Loss (Generating): {:.7f}".format(stats[epoch, 1]))
 
     return model, stats
 
@@ -130,8 +136,8 @@ def test(model, data, sample_step=None, plot=True, show_error=True):
         output = model(Variable(torch.FloatTensor(inputs))).data[0]
         generated_data.append(output)
 
-    error = np.array(generated_data) - np.array(data[input_size:])
-    print('MSE: %.7f' % np.mean(error**2))
+    error = np.mean((np.array(generated_data) - np.array(data[input_size:]))**2)
+    # print('MSE: %.7f' % error)
     if plot:
         xs = range(len(data) - input_size)
         f, ax = plt.subplots()
@@ -146,52 +152,40 @@ def test(model, data, sample_step=None, plot=True, show_error=True):
             ax.plot(xs, [0]*len(xs), linestyle='--')
         plt.legend()
         plt.show()
+    
+    return error
 
 if __name__ == "__main__":
     from MackeyGlass.MackeyGlassGenerator import run
-    data = run(num_data_samples=12000)
-    train_data = data[:7000]; valid_data = data[7000:]
-    model = FFNN(input_size=50, hidden_size=100, n_hidden_layers=3, activation=None)
+    data = run(num_data_samples=20000)
+    data -= np.mean(data)
+    data = data.tolist()
+    train_data = data[:14000]; valid_data = data[14000:]
+    model = FFNN(input_size=50, hidden_size=100, n_hidden_layers=2, activation=nn.Sigmoid)
     criterion = nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.005)
-    model, stats = train(model, train_data, 20, 100, criterion, optimizer, valid_data=None, verbose=1)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
+    model, stats = train(model, train_data, 20, 500, criterion, optimizer, valid_data=valid_data, verbose=1)
     train_losses = stats[:, 0].numpy()
-    if stats.shape[1] > 1:
-        valid_losses = stats[:, 1].numpy()
-    
-    if 0:
-        f, (ax1, ax2) = plt.subplots(2, 1)
-        xs = range(len(train_losses))
-        ax1.plot(xs, train_losses)
-        ax1.set_title('Training loss per epoch')
-        ax1.set_xlabel('Epoch')
-        ax1.set_ylabel('Loss')
+    # valid_losses = stats[:, 1].numpy()
+    print('FOR SOME REASON, the training losses seem to increase with number of epochs (after 1st epoch),')
+    print('but validation errors decrease with number of epochs.')
+    print('NOTE: validation error is calculated in "traditional" way, not where the NN feeds its')
+    print('      predictions back in as input for next time step.')
 
-        xs = range(len(valid_losses))
-        ax2.plot(xs, valid_losses)
-        ax2.set_title('Validation loss per epoch')
-        ax2.set_xlabel('Epoch')
-        ax2.set_ylabel('Loss')
-        plt.show()
+    f, (ax1, ax2) = plt.subplots(2, 1)
+    xs = range(len(train_losses))
+    ax1.plot(xs, train_losses)
+    ax1.set_title('Training loss per epoch')
+    ax1.set_xlabel('Epoch')
+    ax1.set_ylabel('Loss')
 
-
-    #valid_losses = stats[:, 1].numpy()
-
-    if 0:
-        f, (ax1, ax2) = plt.subplots(2, 1)
-        xs = range(len(train_losses))
-        ax1.plot(xs, train_losses)
-        ax1.set_title('Training loss per epoch')
-        ax1.set_xlabel('Epoch')
-        ax1.set_ylabel('Loss')
-
-        xs = range(len(valid_losses))
-        ax2.plot(xs, valid_losses)
-        ax2.set_title('Validation loss per epoch')
-        ax2.set_xlabel('Epoch')
-        ax2.set_ylabel('Loss')
-        plt.show()
+    # xs = range(len(valid_losses))
+    # ax2.plot(xs, valid_losses)
+    # ax2.set_title('Validation loss per epoch')
+    # ax2.set_xlabel('Epoch')
+    # ax2.set_ylabel('Loss')
+    # plt.show()
 
     if 1:
-        test(model, valid_data[:1000], sample_step=None, show_error=0)
+        test(model, valid_data[:500], sample_step=None, show_error=0)
 
