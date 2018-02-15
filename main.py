@@ -9,7 +9,7 @@ def ESN_stochastic_train(data, train_split, esn, num_runs, seed=None):
 
     data_train = data[:train_split]
     print(np.shape(data_train))
-    input_size = 4
+    input_size = 1
     data_train_X = np.zeros((np.shape(data_train)[0] - input_size, input_size))
     data_train_y = np.zeros((np.shape(data_train)[0] - input_size, 1))
     print(np.shape(data_train_X))
@@ -67,7 +67,7 @@ def ESN_stochastic_train(data, train_split, esn, num_runs, seed=None):
         print("iter: {} -- Mean L2 Error TEST: {}, TRAIN: {}".format(e, mse_test, mse_train))
         # print("iter: {} -- Mean L2 Error TEST: {}".format(e, mse_test))
 
-        esn_copy.generate(data_test)
+        esn_copy.generate(data_test[:1000])
 
     mean_mse_test /= num_runs
     mean_mse_train /= num_runs
@@ -77,7 +77,8 @@ def ESN_stochastic_train(data, train_split, esn, num_runs, seed=None):
 if __name__ == "__main__":
     data = np.array([run(12000)]).T
     data -= np.mean(data)
-    data /= np.std(data) * 1000
+    print(np.std(data))
+    data /= np.std(data)
     onExit(data)
-    esn = ESN(input_size=5, output_size=1, reservoir_size=1000, echo_param=0.5, spectral_scale=1.25, init_echo_timesteps=100, regulariser=1e-8)
+    esn = ESN(input_size=2, output_size=1, reservoir_size=1000, echo_param=0.5, spectral_scale=1.25, init_echo_timesteps=100, regulariser=1e-8, debug_mode=True)
     ESN_stochastic_train(data, 7000, esn, 1)

@@ -21,7 +21,7 @@ class ESN():
         self.regulariser = regulariser
 
         # WEIGHTS
-        self.W_in = np.random.randn(input_size, reservoir_size) - 0.5
+        self.W_in = (np.random.randn(input_size, reservoir_size) - 0.5)*(1/100.)
 
         self.W_reservoir = []
         # self.__reservoir_norm_spectral_radius_norm_weights__()
@@ -38,7 +38,8 @@ class ESN():
 
 
     def copy(self):
-        return ESN(self.input_size, self.output_size, self.reservoir_size, self.echo_param, self.spectral_scale, self.init_echo_timesteps)
+        return ESN(self.input_size, self.output_size, self.reservoir_size, self.echo_param, self.spectral_scale, self.init_echo_timesteps,
+                    self.regulariser, self.debug)
 
     def reset_reservoir(self):
         self.reservoir_state = np.zeros((1, self.reservoir_size))
