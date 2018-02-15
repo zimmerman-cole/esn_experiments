@@ -27,7 +27,7 @@ class LSTM(nn.Module):
     def forward(self, inputs, predict_timesteps=0):
         """
         Set predict_timesteps = the number of timesteps you would like to predict/generate 
-            after training on the training data 'inputs'.
+            after training on the training data 'inputs'.Your location
         """
         # inputs.size(): (seq_len, input_size)
         outputs, (h_n, c_n) = self.rnn(inputs)
@@ -51,23 +51,37 @@ class LSTM(nn.Module):
             input_t = output_t
         
         generated_outputs = np.array(generated_outputs).reshape(predict_timesteps, self.input_size)
-        return outputs, Variable(torch.FloatTensor(generated_outputs))
+
+        if torch.cuda.is_available():
+            return outputs, Variable(torch.FloatTensor(generated_outputs))
+        else:
+            return outputs, Variable(torch.FloatTensor(generated_outputs).cuda())
 
 if __name__ == '__main__':
     from MackeyGlass.MackeyGlassGenerator import run
-    data = run(1000) 
+    data = run(12000) 
     
-    train_data = np.array(data[:500]).reshape(-1, 1, 1)
-    test_data = np.array(data[500:]).reshape(-1, 1, 1)
+    train_data = np.array(data[:7000]).reshape(-1, 1, 1)
+    test_data = np.array(data[7000:]).reshape(-1, 1, 1)
     # CONSTRUCT TRAINING, TESTING DATA
-    train_inputs = Variable(torch.from_numpy(train_data[:-1]).float(), requires_grad=0)
-    train_targets = Variable(torch.from_numpy(train_data[1:]).float(), requires_grad=0)
-    test_inputs = Variable(torch.from_numpy(test_data[:-1]).float(), requires_grad=0)
-    test_targets = Variable(torch.from_numpy(test_data[1:]).float(), requires_grad=0)
+    if torch.cuda.is_available():
+        train_inputs = Variable(torch.from_numpy(train_data[:-1]).float().cuda(), requires_grad=0)
+        train_targets = Variable(torch.from_numpy(train_data[1:]).float().cuda(), requires_grad=0)
+        test_inputs = Variable(torch.from_numpy(test_data[:-1]).float().cuda(), requires_grad=0)
+        test_targets = Variable(torch.from_numpy(test_data[1:]).float().cuda(), requires_grad=0)
+    else:
+        train_inputs = Variable(torch.from_numpy(train_data[:-1]).float(), requires_grad=0)
+        train_targets = Variable(torch.from_numpy(train_data[1:]).float(), requires_grad=0)
+        test_inputs = Variable(torch.from_numpy(test_data[:-1]).float(), requires_grad=0)
+        test_targets = Variable(torch.from_numpy(test_data[1:]).float(), requires_grad=0)
 
-    rnn = LSTM(1, 51, n_layers=2)
+    rnn = LSTM(1, 50, n_layers=2)
+
+    if torch.cuda.is_available():
+        rnn.cuda()
+
     criterion = nn.MSELoss()
-    optimizer = optim.Adam(rnn.parameters(), lr=0.005)
+    optimizer = optim.Adam(rnn.parameters(), lr=0.001)
 
     n_epochs = 200
     stats = np.zeros((n_epochs, 2))
@@ -83,18 +97,29 @@ if __name__ == '__main__':
         loss.backward()
         optimizer.step()
 
-        test_outputs = rnn(test_inputs, predict_timesteps=0)
-        loss = criterion(test_outputs, test_targets)
+        test_outputs, generated_outputs = rnn(test_inputs, predict_timesteps=len(test_data))
+        # loss = criterion(test_outputs, test_targets)
+        if torch.cuda.is_available():
+            loss = criterion(Variable(torch.from_numpy(test_data)), generated_outputs.double())
+        else:
+            loss = criterion(Variable(torch.from_numpy(test_data)).cuda(), generated_outputs.double())
+
         stats[epoch, 1] = loss.data.numpy()[0]
         print('Test loss: %.6f' % loss.data.numpy()[0])
 
     # FINAL EPOCH: try generating data as well ====================================
     print('Training finished: running generation tests now.')
     train_outputs, generated_outputs = rnn(train_inputs, predict_timesteps=len(test_data))
-    generated_test_loss = criterion(Variable(torch.from_numpy(test_data)), generated_outputs.double())
+    if torch.cuda.is_available():
+        generated_test_loss = criterion(Variable(torch.from_numpy(test_data)), generated_outputs.double())
+    else:
+        generated_test_loss = criterion(Variable(torch.from_numpy(test_data)).cuda(), generated_outputs.double())
+
     print('MSE loss for generated data: %.6f' % generated_test_loss)
 
-    if 1:
+    display_mode = False
+
+    if display_mode:
         f, ax = plt.subplots(figsize=(12, 12))
         # plot true test target values
         outputs_plt = test_outputs.data.numpy().squeeze()
@@ -104,13 +129,13 @@ if __name__ == '__main__':
         ax.plot(xs, outputs_plt, label='Model')
         ax.set_title('Test outputs; true vs. predicted (no generation)')
         plt.legend(); plt.show()
-    if 1:
+    if display_mode:
         f, ax = plt.subplots(figsize=(12, 12))
         xs = np.arange(n_epochs)
         ax.plot(xs, stats[:, 0], label='Training loss')
         ax.plot(xs, stats[:, 1], label='Test loss')
         plt.legend(); plt.show()
-    if 1:
+    if display_mode:
         generated_plt = generated_outputs.data.numpy().squeeze()
         test_plt = test_data.squeeze()
         f, ax = plt.subplots(figsize=(12, 12))
