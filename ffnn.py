@@ -1,4 +1,5 @@
 from collections import OrderedDict
+import time
 import torch
 import torch.nn as nn
 import torch.nn.functional as f
@@ -161,7 +162,7 @@ def test(model, data, sample_step=None, plot=True, show_error=True, save_fig=Fal
 
 if __name__ == "__main__":
     # Experiment settings / parameters ========================================================
-
+    t = str(time.time()).replace('.', 'p')
     eval_valid = True # whether or not to evaluate MSE loss on test set during training
     eval_gener = True # whether or not to generate future values, calculate that MSE loss
     save_fig = True
@@ -187,11 +188,11 @@ if __name__ == "__main__":
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=learn_rate)
 
-    title = "ninputs%d__layers%d__nHU%d__lambda%.5f" \
-            % (model.input_size, model.n_hidden_layers, model.hidden_size, reg)
+    title = "%s__ninputs%d__layers%d__nHU%d__lambda%.5f" \
+            % (t, model.input_size, model.n_hidden_layers, model.hidden_size, reg)
     title = title.replace('.', 'p') # replace period w/ 'p' so can be used as filename
     # Train model ============================================================================
-    model, stats = train(model, train_data, 20, 500, criterion, optimizer, valid_data=valid_data, verbose=1)
+    model, stats = train(model, train_data, 20, 3, criterion, optimizer, valid_data=valid_data, verbose=1)
 
     train_losses = stats[:, 0].numpy()
     if eval_valid:
@@ -243,7 +244,7 @@ if __name__ == "__main__":
         to_save['n_generated_values'] = n_generate_values
         to_save['adam_learn_rate'] = learn_rate
 
-        fname = 'Results/FFNN/PKL__%s.pdf'
+        fname = 'Results/FFNN/PKL__%s.pdf' % title
         pkl.dump(to_save, open(fname, 'wb'))
 
 
