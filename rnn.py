@@ -53,9 +53,9 @@ class LSTM(nn.Module):
         generated_outputs = np.array(generated_outputs).reshape(predict_timesteps, self.input_size)
 
         if torch.cuda.is_available():
-            return outputs, Variable(torch.FloatTensor(generated_outputs))
-        else:
             return outputs, Variable(torch.FloatTensor(generated_outputs).cuda())
+        else:
+            return outputs, Variable(torch.FloatTensor(generated_outputs))
 
 if __name__ == '__main__':
     from MackeyGlass.MackeyGlassGenerator import run
