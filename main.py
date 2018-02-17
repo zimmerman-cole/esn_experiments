@@ -55,18 +55,18 @@ def ESN_stochastic_train(data, train_split, esn, num_runs, seed=None):
         plt.title("Output Weights")
         plt.show()
 
-    #y_pred_test = esn.predict(data_test_X)
+    y_pred_test = esn.predict(data_test_X)
     # plt.plot(range(len(y_pred_test)), y_pred_test)
     # plt.plot(range(len(data_test_X)), data_test_X)
     # plt.show()
-    #y_pred_train = esn.predict(data_train_X, reset_res=True)
+    y_pred_train = esn.predict(data_train_X, reset_res=True)
 
-    #mse_test = esn.mean_l2_error(data_test_y, y_pred_test)
-    #mse_train = esn.mean_l2_error(data_train_y[esn.init_echo_timesteps:], y_pred_train)
-    #mean_mse_test += mse_test
-    #mean_mse_train += mse_train
+    mse_test = esn.mean_l2_error(data_test_y, y_pred_test)
+    mse_train = esn.mean_l2_error(data_train_y[esn.init_echo_timesteps:], y_pred_train)
+    mean_mse_test += mse_test
+    mean_mse_train += mse_train
     #print("iter: {} -- Mean L2 Error TEST: {}, TRAIN: {}".format(e, mse_test, mse_train))
-    # print("iter: {} -- Mean L2 Error TEST: {}".format(e, mse_test))
+    #print("iter: {} -- Mean L2 Error TEST: {}".format(e, mse_test))
 
     #gen_err, generated_data = esn_copy.generate(data_test[:1000], plot=False)
     gen_err, generated_data = esn.generate(data_test[:1500], plot=False)
@@ -80,7 +80,7 @@ def ESN_stochastic_train(data, train_split, esn, num_runs, seed=None):
     mean_mse_train /= num_runs
     print("\n\nFINAL -- Mean L2 Error TEST: {}, TRAIN: {}".format(mean_mse_test, mean_mse_train))
 
-    return gen_err, generated_data, data_test[(1+esn.input_size-1):1500,0], esn.training_signals
+    return gen_err, generated_data, data_test[(esn.init_echo_timesteps+esn.input_size-1):1500,0], esn.training_signals
 
 def fancy_plot_generative(generated_data, actual_data, num_rows, num_cols, titles=[]):
     # generated data and actual data should be lists of data sets so that subplots can be made
@@ -122,14 +122,15 @@ def fancy_plot_signals(signals_data, num_rows, num_cols, titles=[]):
 
 
 if __name__ == "__main__":
-    data = np.array([run(4000)]).T
+    data = np.array([run(12000)]).T
     #data = np.loadtxt('../../../MackeyGlass_t17.txt')
     #data -= np.mean(data)
     #data += 100.0
     #data -= np.mean(data)
     #print(np.std(data))
     #data /= np.std(data)
-    #onExit(data)
+    #data *= 2.0
+    onExit(data)
     #esn = ESN(input_size=2, output_size=1, reservoir_size=1000, echo_param=0.1, spectral_scale=1.1, init_echo_timesteps=100, regulariser=1e-0, debug_mode=True)
     #ESN_stochastic_train(data, 7000, esn, 1)
 
@@ -139,14 +140,14 @@ if __name__ == "__main__":
     training_signals = []
     # run a few test of different hyperparameters
     count = 0
-    for e in [0.5, 0.5, 0.6]:
+    for e in [0.3]:
         for r in [1000]:
-            for reg in [1e-5]:
-                for s in [1.2, 1.2, 1.3]:
-                    for a in [1/1000.]:
+            for reg in [1e-4, 1e-7]:
+                for s in [1.2, 1.6]:
+                    for a in [1/1.]:
                         print("EXPERIMENT - ECHO {}, RES {}, REG {}, SPECT {}, W_IN {}".format(e, r, reg, s, a))
                         esn = ESN(input_size=2, output_size=1, reservoir_size=r, echo_param=e, spectral_scale=s, init_echo_timesteps=100,regulariser=reg, input_weights_scale=a, debug_mode=False)
-                        gen_err, g_, a_, signals_ = ESN_stochastic_train(data, 2000, esn, 1)
+                        gen_err, g_, a_, signals_ = ESN_stochastic_train(data, 7000, esn, 1)
                         g_data.append(g_)
                         a_data.append(a_)
                         titles.append(("ECHO: {:.2f}, SPEC: {:.2f}, REG: {}, W-IN: {}".format(e, s, reg, a)))
@@ -156,10 +157,10 @@ if __name__ == "__main__":
 
 
     # plot the generated data versus actual data of the ESNs
-    fancy_plot_generative(g_data, a_data, 3, 3, titles=titles)
+    fancy_plot_generative(g_data, a_data, 2, 2, titles=titles)
 
     # plot some signals of the ESNs
-    fancy_plot_signals(training_signals, 3, 3, titles=titles)
+    fancy_plot_signals(training_signals, 2, 2, titles=titles)
 
     plt.show()
 

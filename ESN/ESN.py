@@ -25,8 +25,8 @@ class ESN():
 
         # WEIGHTS
         #self.W_in = (np.random.randn(input_size, reservoir_size) - 0.5)*(1/1000.)
-        #self.W_in = ((np.random.rand(input_size, reservoir_size) > 0.5).astype(int) - 0.5) *self.input_weights_scale 
-        self.W_in = (np.random.rand(input_size, reservoir_size) - 0.5) *self.input_weights_scale 
+        self.W_in = ((np.random.rand(input_size, reservoir_size) > 0.5).astype(int) - 0.5) *self.input_weights_scale 
+        #self.W_in = (np.random.rand(input_size, reservoir_size) - 0.5) *self.input_weights_scale 
 
         self.W_reservoir = []
         # self.__reservoir_norm_spectral_radius_norm_weights__()
@@ -179,15 +179,15 @@ class ESN():
     def generate(self, data, sample_step=None, plot=True, show_error=True):
         """ Pass the trained model. """
         # reset the reservoir
-        #self.reset_reservoir()
-        print(data)
+        self.reset_reservoir()
+        #print(data)
 
         input_size = self.input_size-1 # -1 because of bias
 
         generated_data = []
         for i in range(0, len(data)-input_size):
             # run after the reservoir has "warmed-up"
-            if i >= 1: #self.init_echo_timesteps:
+            if i >= self.init_echo_timesteps:
                 inputs = np.hstack((inputs, output[0]))
                 inputs = inputs[1:]
                 d_bias = np.hstack(([inputs], np.ones((1,1))))
@@ -204,10 +204,11 @@ class ESN():
         if self.debug: print(np.shape(np.array(generated_data)[:, None]))
         if self.debug: print(np.hstack((data[(self.init_echo_timesteps+input_size):], 
                             np.array(generated_data)[:, None])))
-        #error = np.mean((np.array(generated_data)[:, None] - data[(self.init_echo_timesteps+input_size):])**2)
-        error_mean = np.mean((np.array(generated_data)[:, None] - data[(1+input_size):])**2)
-        error_var = np.var((np.array(generated_data)[:, None] - data[(1+input_size):]))
-        error = np.sqrt(error_mean/error_var)
+        error = np.mean((np.array(generated_data)[:, None] - data[(self.init_echo_timesteps+input_size):])**2)
+        #error_mean = np.mean((np.array(generated_data)[:, None] - data[(1+input_size):])**2)
+        #error_var_2 = np.sum((np.mean(data[(1+input_size):]) - data[(1+input_size):])**2)
+        #error = (1.0 - error_mean/error_var_2)
+        #error = np.mean((np.array(generated_data)[:, None] - data[(1+input_size):])**2)
         print('MSE generating test: %.7f' % error)
         if plot:
             xs = range(np.shape(data[self.init_echo_timesteps:])[0] - input_size)
