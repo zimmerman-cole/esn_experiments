@@ -53,17 +53,18 @@ class FFNN(nn.Module):
     def forward(self, x):
         return self.model(x)
 
-def train(model, train_data, batch_size, num_epochs, criterion, optimizer, valid_data=None, verbose=1):
+def train(model, train_data, batch_size, num_epochs, criterion, optimizer, valid_data=None, 
+          verbose=1, eval_gen_loss=False, n_generate_values=2000):
     input_size = model.input_size
     #assert (len(train_data) - input_size) % batch_size == 0, \
     #            "there is leftover training data that doesn't fit neatly into a batch"
 
     n_iter = int((len(train_data) - input_size) / batch_size)
 
-    if valid_data is not None:
-        stats = torch.FloatTensor(num_epochs, 2)
-    else:
-        stats = torch.FloatTensor(num_epochs, 1)
+    # rows: epoch number. columns: (sup. train nrmse, sup. valid nrmse, gen. train nrmse, 
+    #    gen. valid nrmse). If valid_data not provided, last 3 columns are zeros. 
+    #    Else if eval_gen_loss=False, last two columns zeros.
+    stats = torch.zeros(num_epochs, 4)
 
     for epoch in range(num_epochs):
         train_loss = 0.
@@ -85,7 +86,9 @@ def train(model, train_data, batch_size, num_epochs, criterion, optimizer, valid
             loss.backward()
             optimizer.step()
 
-            train_loss += loss.data[0]
+            # normalized root mean square error
+            nrmse = np.sqrt(loss.data[0] / __DATA_VAR__)
+            train_loss += nrmse
 
         if criterion.size_average:
             train_loss /= float(n_iter)
@@ -94,9 +97,16 @@ def train(model, train_data, batch_size, num_epochs, criterion, optimizer, valid
         if verbose:
             print('='*50)
             print('Epoch [%d/%d]' % (epoch+1, num_epochs))
-            print('Total training loss: %.7f' % train_loss)
+            print('Total training NRMSE: %.7f' % train_loss)
+
+        # Calculate GENERATION training loss ======================================
+        if eval_gen_loss:
+            gen_outs, nrmse = test(model, train_data[:n_generate_values])
+            print('Generation training NRMSE (for %d time steps): %.7f' % (n_generate_values, nrmse))
+            stats[epoch, 2] = nrmse
 
         if valid_data is not None:
+            # Calculate SUPERVISED validation loss ================================
             valid_loss = 0.
             for i in range(len(valid_data) - input_size):
                 inputs = valid_data[i:(i+input_size)]
@@ -104,19 +114,32 @@ def train(model, train_data, batch_size, num_epochs, criterion, optimizer, valid
                 target = Variable(torch.FloatTensor([valid_data[i+input_size]]))
 
                 output = model(inputs)
-                valid_loss += criterion(output, target).data[0]
+                mse = criterion(output, target).data[0]
+                nrmse = np.sqrt(mse / __DATA_VAR__)
+                valid_loss += nrmse
 
             if criterion.size_average:
                 valid_loss /= (len(valid_data) - input_size)
 
             stats[epoch, 1] = valid_loss
             if verbose:
-                print('Total validation loss: %.7f' % valid_loss)
+                print('Total validation NRMSE: %.7f' % valid_loss)
+
+            if eval_gen_loss:
+                # Now calculate GENERATION validation loss ===========================
+                gen_outs, nrmse = test(model, valid_data[:n_generate_timesteps])
+                print('Generation validation NRMSE (for %d time steps): %.7f' % \
+                        (n_generate_values, nrmse))
+                stats[epoch, 3] = nrmse
 
     return model, stats
 
 def test(model, data, sample_step=None, plot=True, show_error=True, save_fig=False, title=None):
-    """ Pass the trained model. """
+    """ 
+    Pass the trained model. 
+    Returns (generated_outputs, generation_nrmse).
+    """
+
     input_size = model.input_size
 
     inputs = data[:input_size] # type(inputs) = list
@@ -134,8 +157,12 @@ def test(model, data, sample_step=None, plot=True, show_error=True, save_fig=Fal
 
         output = model(Variable(torch.FloatTensor(inputs))).data[0]
         generated_data.append(output)
-
+    
+    # MSE
     error = np.mean((np.array(generated_data) - np.array(data[input_size:]))**2)
+    # normalized RMSE
+    error = np.sqrt(error / __DATA_VAR__)
+
     # print('MSE: %.7f' % error)
     if plot:
         xs = range(len(data) - input_size)
@@ -176,6 +203,7 @@ if __name__ == "__main__":
     from MackeyGlass.MackeyGlassGenerator import run
     data = run(num_data_samples=20000)
     data_var = np.var(np.array(data))
+    __DATA_VAR__ = np.var(np.array(data))
 
     train_data = data[:14000]
     if eval_valid:
@@ -192,8 +220,10 @@ if __name__ == "__main__":
             % (t, model.input_size, model.n_hidden_layers, model.hidden_size, reg)
     title = title.replace('.', 'p') # replace period w/ 'p' so can be used as filename
     # Train model ============================================================================
-    model, stats = train(model, train_data, 20, 3, criterion, optimizer, valid_data=valid_data, verbose=1)
+    model, stats = train(model, train_data, 20, 3, criterion, optimizer, 
+                         valid_data=valid_data, verbose=1)
 
+    # losses are NORMALIZED ROOT MEAN SQUARE ERROR (not regular MSE)
     train_losses = stats[:, 0].numpy()
     if eval_valid:
         valid_losses = stats[:, 1].numpy()
@@ -232,8 +262,8 @@ if __name__ == "__main__":
             save_fig=save_fig, title=g_title
         )
 
-        gen_mse_normed = gen_mse / float(data_var)
-        print('NORMALIZED MSE for %d generated values: %.7f' % (n_generate_values, gen_mse_normed))
+        gen_mse_normed = gen_mse
+        print('NRMSE for %d generated values: %.7f' % (n_generate_values, gen_mse_normed))
 
         import pickle as pkl
         to_save = dict()
