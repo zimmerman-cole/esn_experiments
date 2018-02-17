@@ -1,4 +1,5 @@
 from collections import OrderedDict
+from copy import deepcopy
 import time
 import torch
 import torch.nn as nn
@@ -54,7 +55,7 @@ class FFNN(nn.Module):
         return self.model(x)
 
 def train(model, train_data, batch_size, num_epochs, criterion, optimizer, valid_data=None, 
-          verbose=1, eval_gen_loss=False, n_generate_values=2000):
+          verbose=1, eval_gen_loss=False, n_generate_timesteps=2000):
     input_size = model.input_size
     #assert (len(train_data) - input_size) % batch_size == 0, \
     #            "there is leftover training data that doesn't fit neatly into a batch"
@@ -65,6 +66,10 @@ def train(model, train_data, batch_size, num_epochs, criterion, optimizer, valid
     #    gen. valid nrmse). If valid_data not provided, last 3 columns are zeros. 
     #    Else if eval_gen_loss=False, last two columns zeros.
     stats = torch.zeros(num_epochs, 4)
+
+    if eval_gen_loss:
+        # 'early stopping': return the model that gives lowest validation generation NRMSE
+        best_model = (None, np.inf, None)
 
     for epoch in range(num_epochs):
         train_loss = 0.
@@ -97,12 +102,13 @@ def train(model, train_data, batch_size, num_epochs, criterion, optimizer, valid
         if verbose:
             print('='*50)
             print('Epoch [%d/%d]' % (epoch+1, num_epochs))
-            print('Total training NRMSE: %.7f' % train_loss)
+            print('Total sup. training NRMSE: %.7f' % train_loss)
 
         # Calculate GENERATION training loss ======================================
         if eval_gen_loss:
-            gen_outs, nrmse = test(model, train_data[:n_generate_values])
-            print('Generation training NRMSE (for %d time steps): %.7f' % (n_generate_values, nrmse))
+            gen_outs, nrmse = test(model, train_data[:n_generate_timesteps], plot=False)
+            print('Generation training NRMSE (for %d time steps): %.7f' % \
+                    (n_generate_timesteps, nrmse))
             stats[epoch, 2] = nrmse
 
         if valid_data is not None:
@@ -123,16 +129,22 @@ def train(model, train_data, batch_size, num_epochs, criterion, optimizer, valid
 
             stats[epoch, 1] = valid_loss
             if verbose:
-                print('Total validation NRMSE: %.7f' % valid_loss)
+                print('Total sup. validation NRMSE: %.7f' % valid_loss)
 
             if eval_gen_loss:
                 # Now calculate GENERATION validation loss ===========================
-                gen_outs, nrmse = test(model, valid_data[:n_generate_timesteps])
+                gen_outs, nrmse = test(model, valid_data[:n_generate_timesteps], plot=False)
                 print('Generation validation NRMSE (for %d time steps): %.7f' % \
-                        (n_generate_values, nrmse))
+                        (n_generate_timesteps, nrmse))
                 stats[epoch, 3] = nrmse
-
-    return model, stats
+                
+                if nrmse <= best_model[1]:
+                    best_model = (deepcopy(model), nrmse, epoch)
+    
+    if eval_gen_loss:
+        return best_model[0], stats
+    else:
+        return model, stats
 
 def test(model, data, sample_step=None, plot=True, show_error=True, save_fig=False, title=None):
     """ 
@@ -196,8 +208,10 @@ if __name__ == "__main__":
 
     reg = 0. # lambda for L2 regularization 
 
-    n_generate_values = 2000
+    n_generate_timesteps = 2000
     learn_rate = 0.0001
+
+    n_epochs = 500
     # ========================================================================================
     # Get data ===============================================================================
     from MackeyGlass.MackeyGlassGenerator import run
@@ -220,8 +234,9 @@ if __name__ == "__main__":
             % (t, model.input_size, model.n_hidden_layers, model.hidden_size, reg)
     title = title.replace('.', 'p') # replace period w/ 'p' so can be used as filename
     # Train model ============================================================================
-    model, stats = train(model, train_data, 20, 3, criterion, optimizer, 
-                         valid_data=valid_data, verbose=1)
+    model, stats = train(model, train_data, 20, n_epochs, criterion, optimizer, 
+                         valid_data=valid_data, verbose=1, eval_gen_loss=True,
+                         n_generate_timesteps=n_generate_timesteps)
 
     # losses are NORMALIZED ROOT MEAN SQUARE ERROR (not regular MSE)
     train_losses = stats[:, 0].numpy()
@@ -258,12 +273,13 @@ if __name__ == "__main__":
     if eval_gener:
         g_title = 'Results/FFNN/FIG__%s__gen-loss.pdf' % title
         generated_outputs, gen_mse = test(
-            model, valid_data[:n_generate_values], sample_step=None, show_error=0, \
+            model, valid_data[:n_generate_timesteps], sample_step=None, show_error=0, \
             save_fig=save_fig, title=g_title
         )
 
         gen_mse_normed = gen_mse
-        print('NRMSE for %d generated values: %.7f' % (n_generate_values, gen_mse_normed))
+        print('Best validation NRMSE for %d generated values: %.7f' % \
+                (n_generate_timesteps, gen_mse_normed))
 
         import pickle as pkl
         to_save = dict()
@@ -271,10 +287,10 @@ if __name__ == "__main__":
         to_save['model'] = model
         to_save['gen_outputs'] = generated_outputs
         to_save['gen_normed_mse'] = gen_mse_normed
-        to_save['n_generated_values'] = n_generate_values
+        to_save['n_generated_timesteps'] = n_generate_timesteps
         to_save['adam_learn_rate'] = learn_rate
 
-        fname = 'Results/FFNN/PKL__%s.pdf' % title
+        fname = 'Results/FFNN/PKL__%s.p' % title
         pkl.dump(to_save, open(fname, 'wb'))
 
 
