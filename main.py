@@ -83,7 +83,7 @@ def ESN_stochastic_train(data, train_split, esn, num_runs, seed=None):
 
 def fancy_plot(generated_data, actual_data, num_rows, num_cols, titles=[]):
     # generated data and actual data should be lists of data sets so that subplots can be made
-    f, ax = plt.subplots(num_rows, num_cols, sharex=True, sharey=True)
+    f, ax = plt.subplots(num_rows, num_cols, sharex=False, sharey=False)
 
     for r in range(num_rows):
         for c in range(num_cols):
@@ -114,14 +114,20 @@ if __name__ == "__main__":
     a_data = []
     titles = []
     # run a few test of different hyperparameters
-    for e in np.linspace(0, 1, 16):
-        esn = ESN(input_size=2, output_size=1, reservoir_size=1000, echo_param=e, spectral_scale=1.1, init_echo_timesteps=100, regulariser=1e-0, debug_mode=False)
-        gen_err, g_, a_ = ESN_stochastic_train(data, 7000, esn, 1)
-        g_data.append(g_)
-        a_data.append(a_)
-        titles.append(("ECHO PARAM: {}:".format(e)))
+    count = 0
+    for e in [0.4]:
+        for r in [1000]:
+            for reg in [1e-4, 1e-4, 1e-4, 1e-4]:
+                for s in [1.0]:
+                    esn = ESN(input_size=2, output_size=1, reservoir_size=1000, echo_param=e, spectral_scale=1.1, init_echo_timesteps=100, regulariser=1e-0, debug_mode=False)
+                    gen_err, g_, a_ = ESN_stochastic_train(data, 7000, esn, 1)
+                    g_data.append(g_)
+                    a_data.append(a_)
+                    titles.append(("ECHO: {:.2f}, RES: {:.2f}, REG: {:.1f}, SPEC: {:.2f}".format(e, r, reg, s)))
+                    count += 1
+                    print("COUNT: {}".format(count))
 
-    fancy_plot(g_data, a_data, 4, 4, titles=titles)
+    fancy_plot(g_data, a_data, 2, 2, titles=titles)
 
 
 
