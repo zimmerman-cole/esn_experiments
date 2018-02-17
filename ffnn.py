@@ -141,7 +141,7 @@ def train(model, train_data, batch_size, num_epochs, criterion, optimizer, valid
                 if nrmse <= best_model[1]:
                     best_model = (deepcopy(model), nrmse, epoch)
     
-    if eval_gen_loss:
+    if valid_data is not None and eval_gen_loss:
         return best_model[0], stats
     else:
         return model, stats
@@ -202,8 +202,9 @@ def test(model, data, sample_step=None, plot=True, show_error=True, save_fig=Fal
 if __name__ == "__main__":
     # Experiment settings / parameters ========================================================
     t = str(time.time()).replace('.', 'p')
-    eval_valid = True # whether or not to evaluate MSE loss on test set during training
-    eval_gener = True # whether or not to generate future values, calculate that MSE loss
+    eval_valid = False    # whether or not to evaluate MSE loss on test set during training
+    eval_gener = True    # whether or not to generate future values, calculate that MSE loss
+    eval_gen_loss = False
     save_fig = True
 
     reg = 0. # lambda for L2 regularization 
@@ -235,7 +236,7 @@ if __name__ == "__main__":
     title = title.replace('.', 'p') # replace period w/ 'p' so can be used as filename
     # Train model ============================================================================
     model, stats = train(model, train_data, 20, n_epochs, criterion, optimizer, 
-                         valid_data=valid_data, verbose=1, eval_gen_loss=True,
+                         valid_data=valid_data, verbose=1, eval_gen_loss=eval_gen_loss,
                          n_generate_timesteps=n_generate_timesteps)
 
     # losses are NORMALIZED ROOT MEAN SQUARE ERROR (not regular MSE)
@@ -271,6 +272,9 @@ if __name__ == "__main__":
             f.savefig('Results/FFNN/FIG__%s__tr-loss.pdf' % title)
 
     if eval_gener:
+        if valid_data is None:
+            valid_data = data[14000:]
+
         g_title = 'Results/FFNN/FIG__%s__gen-loss.pdf' % title
         generated_outputs, gen_mse = test(
             model, valid_data[:n_generate_timesteps], sample_step=None, show_error=0, \
