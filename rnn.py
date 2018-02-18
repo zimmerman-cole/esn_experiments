@@ -66,7 +66,7 @@ if __name__ == '__main__':
     DATA_MEAN = np.mean(data)
     
     train_data = np.array(data[:14000]).reshape(-1, 1, 1)
-    test_data = np.array(data[6000:]).reshape(-1, 1, 1)
+    test_data = np.array(data[14000:]).reshape(-1, 1, 1)
     # CONSTRUCT TRAINING, TESTING DATA
     if torch.cuda.is_available():
         train_inputs = Variable(torch.from_numpy(train_data[:-1]).float().cuda(), requires_grad=0)
@@ -82,7 +82,10 @@ if __name__ == '__main__':
     rnn = LSTM(1, 10, n_layers=2)
 
     if torch.cuda.is_available():
+	print("RUNNING CUDA!")
         rnn.cuda()
+    else:
+        print("NOT RUNNING CUDA!")
 
     criterion = nn.MSELoss()
     optimizer = optim.Adam(rnn.parameters(), lr=0.003)
@@ -95,7 +98,6 @@ if __name__ == '__main__':
         # calculate outputs, loss, then step
         optimizer.zero_grad()
         train_outputs, train_gen = rnn(train_inputs, predict_timesteps=len(train_inputs))
-        test_outputs, test_gen = rnn(test_inputs, predict_timesteps=len(test_inputs))
         loss = criterion(train_outputs, train_targets)
         #stats[epoch, 0] = loss.data.cpu().numpy()[0]
         #print('Training MSE loss: %.6f' % stats[epoch, 0])
@@ -107,6 +109,8 @@ if __name__ == '__main__':
         #if torch.cuda.is_available():
             #loss = criterion(Variable(torch.from_numpy(test_data)), generated_outputs.double())
         #else:
+        train_outputs, train_gen = rnn(train_inputs, predict_timesteps=len(train_inputs))
+        test_outputs, test_gen = rnn(test_inputs, predict_timesteps=len(test_inputs))
             #loss = criterion(Variable(torch.from_numpy(test_data)).cuda(), generated_outputs.double())
 	nrmse_sup_train = nrmse(train_outputs.cpu().data.numpy(), train_targets.cpu().data.numpy(), DATA_MEAN)
 	nrmse_sup_test = nrmse(test_outputs.cpu().data.numpy(), test_targets.cpu().data.numpy(), DATA_MEAN)
