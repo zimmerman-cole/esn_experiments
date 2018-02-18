@@ -211,7 +211,7 @@ if __name__ == "__main__":
     n_generate_timesteps = 2000
     learn_rate = 0.0001
 
-    n_epochs = 500
+    n_epochs = 50
     # ========================================================================================
     # Get data ===============================================================================
     from MackeyGlass.MackeyGlassGenerator import run

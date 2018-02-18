@@ -176,7 +176,7 @@ class ESN():
         return y_out
         #return data[:,0][:, None] - 0.01
 
-    def generate(self, data, sample_step=None, plot=True, show_error=True):
+    def generate(self, data, MEAN_OF_DATA, sample_step=None, plot=True, show_error=True):
         """ Pass the trained model. """
         # reset the reservoir
         self.reset_reservoir()
@@ -204,12 +204,15 @@ class ESN():
         if self.debug: print(np.shape(np.array(generated_data)[:, None]))
         if self.debug: print(np.hstack((data[(self.init_echo_timesteps+input_size):], 
                             np.array(generated_data)[:, None])))
-        error = np.mean((np.array(generated_data)[:, None] - data[(self.init_echo_timesteps+input_size):])**2)
+        #error = np.mean((np.array(generated_data)[:, None] - data[(self.init_echo_timesteps+input_size):])**2)
+        error = self.nmse(data[(self.init_echo_timesteps+input_size):], np.array(generated_data)[:, None], MEAN_OF_DATA)
         #error_mean = np.mean((np.array(generated_data)[:, None] - data[(1+input_size):])**2)
         #error_var_2 = np.sum((np.mean(data[(1+input_size):]) - data[(1+input_size):])**2)
         #error = (1.0 - error_mean/error_var_2)
         #error = np.mean((np.array(generated_data)[:, None] - data[(1+input_size):])**2)
-        print('MSE generating test: %.7f' % error)
+
+        if show_error: print('NMSE generating test: %.7f' % error)
+
         if plot:
             xs = range(np.shape(data[self.init_echo_timesteps:])[0] - input_size)
             f, ax = plt.subplots()
@@ -236,6 +239,10 @@ class ESN():
     def mean_l2_error(self, y_out, y_pred):
         if self.debug: print(np.hstack((y_out, y_pred)))
         return np.mean((np.array(y_out) - np.array(y_pred))**2)
+
+    def nmse(self, y_out, y_pred, MEAN_OF_DATA):
+        # y_out_mean = np.mean(y_out)
+        return np.sqrt(np.sum((y_out - y_pred)**2)/np.sum((y_out - MEAN_OF_DATA)**2))
 
     def save(self):
         # put this here for now just to remember that it is important to save the reservoir
