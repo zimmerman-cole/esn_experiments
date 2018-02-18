@@ -53,16 +53,20 @@ class LSTM(nn.Module):
         generated_outputs = np.array(generated_outputs).reshape(predict_timesteps, self.input_size)
 
         if torch.cuda.is_available():
-            return outputs, Variable(torch.FloatTensor(generated_outputs))
-        else:
             return outputs, Variable(torch.FloatTensor(generated_outputs).cuda())
+        else:
+            return outputs, Variable(torch.FloatTensor(generated_outputs))
+
+def nrmse(y_pred, y_target, DATA_MEAN):
+	return np.sqrt(np.sum((y_pred - y_target)**2)/np.sum((y_target - DATA_MEAN)**2))
 
 if __name__ == '__main__':
     from MackeyGlass.MackeyGlassGenerator import run
-    data = run(12000) 
+    data = run(20000) 
+    DATA_MEAN = np.mean(data)
     
-    train_data = np.array(data[:7000]).reshape(-1, 1, 1)
-    test_data = np.array(data[7000:]).reshape(-1, 1, 1)
+    train_data = np.array(data[:14000]).reshape(-1, 1, 1)
+    test_data = np.array(data[6000:]).reshape(-1, 1, 1)
     # CONSTRUCT TRAINING, TESTING DATA
     if torch.cuda.is_available():
         train_inputs = Variable(torch.from_numpy(train_data[:-1]).float().cuda(), requires_grad=0)
@@ -75,13 +79,13 @@ if __name__ == '__main__':
         test_inputs = Variable(torch.from_numpy(test_data[:-1]).float(), requires_grad=0)
         test_targets = Variable(torch.from_numpy(test_data[1:]).float(), requires_grad=0)
 
-    rnn = LSTM(1, 50, n_layers=2)
+    rnn = LSTM(1, 10, n_layers=2)
 
     if torch.cuda.is_available():
         rnn.cuda()
 
     criterion = nn.MSELoss()
-    optimizer = optim.Adam(rnn.parameters(), lr=0.001)
+    optimizer = optim.Adam(rnn.parameters(), lr=0.003)
 
     n_epochs = 200
     stats = np.zeros((n_epochs, 2))
@@ -90,22 +94,31 @@ if __name__ == '__main__':
         
         # calculate outputs, loss, then step
         optimizer.zero_grad()
-        train_outputs = rnn(train_inputs)
+        train_outputs, train_gen = rnn(train_inputs, predict_timesteps=len(train_inputs))
+        test_outputs, test_gen = rnn(test_inputs, predict_timesteps=len(test_inputs))
         loss = criterion(train_outputs, train_targets)
-        stats[epoch, 0] = loss.data.cpu().numpy()[0]
-        print('Training loss: %.6f' % stats[epoch, 0])
+        #stats[epoch, 0] = loss.data.cpu().numpy()[0]
+        #print('Training MSE loss: %.6f' % stats[epoch, 0])
         loss.backward()
         optimizer.step()
 
-        test_outputs, generated_outputs = rnn(test_inputs, predict_timesteps=len(test_data))
+        #test_outputs, generated_outputs = rnn(test_inputs, predict_timesteps=len(test_data))
         # loss = criterion(test_outputs, test_targets)
-        if torch.cuda.is_available():
-            loss = criterion(Variable(torch.from_numpy(test_data)), generated_outputs.double())
-        else:
-            loss = criterion(Variable(torch.from_numpy(test_data)).cuda(), generated_outputs.double())
+        #if torch.cuda.is_available():
+            #loss = criterion(Variable(torch.from_numpy(test_data)), generated_outputs.double())
+        #else:
+            #loss = criterion(Variable(torch.from_numpy(test_data)).cuda(), generated_outputs.double())
+	nrmse_sup_train = nrmse(train_outputs.cpu().data.numpy(), train_targets.cpu().data.numpy(), DATA_MEAN)
+	nrmse_sup_test = nrmse(test_outputs.cpu().data.numpy(), test_targets.cpu().data.numpy(), DATA_MEAN)
+	nrmse_gen_train = nrmse(train_gen.cpu().data.numpy(), train_targets.cpu().data.numpy(), DATA_MEAN)
+	nrmse_gen_test = nrmse(test_gen.cpu().data.numpy(), test_targets.cpu().data.numpy(), DATA_MEAN)
 
-        stats[epoch, 1] = loss.data.cpu().numpy()[0]
-        print('Test loss: %.6f' % stats[epoch, 1]) 
+        #stats[epoch, 1] = loss.data.cpu().numpy()[0]
+        #print('Test loss: %.6f' % stats[epoch, 1]) 
+        stats[epoch, 0] = nrmse_sup_train 
+        stats[epoch, 1] = nrmse_sup_test
+        print('RMSE (SUP) -- TRAIN: {}, TEST: {}'.format(nrmse_sup_train, nrmse_sup_test))
+        print('RMSE (GEN) -- TRAIN: {}, TEST: {}'.format(nrmse_gen_train, nrmse_gen_test))
 
     # FINAL EPOCH: try generating data as well ====================================
     print('Training finished: running generation tests now.')
@@ -124,6 +137,8 @@ if __name__ == '__main__':
         # plot true test target values
         outputs_plt = test_outputs.data.cpu().numpy().squeeze()
         targets_plt = test_targets.data.cpu().numpy().squeeze()
+        #outputs_plt = test_outputs.data.cpu().numpy().squeeze()
+        #targets_plt = test_targets.data.cpu().numpy().squeeze()
         xs = np.arange(len(outputs_plt))
         ax.plot(xs, targets_plt, label='True')
         ax.plot(xs, outputs_plt, label='Model')

@@ -4,14 +4,17 @@ import matplotlib.pyplot as plt
 
 class ESN():
 
-    def __init__(self, input_size, output_size, reservoir_size=100, echo_param=0.6, spectral_scale=1.0, init_echo_timesteps=100,
-                regulariser=1e-8, debug_mode=False):
+    def __init__(self, input_size, output_size, reservoir_size=100, echo_param=0.6, 
+                spectral_scale=1.0, init_echo_timesteps=100,
+                regulariser=1e-8, input_weights_scale=(1/100.),
+                debug_mode=False):
 
         # ARCHITECTURE PARAMS
         self.input_size = input_size
         self.reservoir_size = reservoir_size
         self.output_size = output_size
         self.activation_function = np.tanh
+        self.input_weights_scale = input_weights_scale
 
         # RESOVOIR PARAMS
         self.spectral_scale = spectral_scale
@@ -21,7 +24,9 @@ class ESN():
         self.regulariser = regulariser
 
         # WEIGHTS
-        self.W_in = np.random.randn(input_size, reservoir_size) - 0.5
+        #self.W_in = (np.random.randn(input_size, reservoir_size) - 0.5)*(1/1000.)
+        self.W_in = ((np.random.rand(input_size, reservoir_size) > 0.5).astype(int) - 0.5) *self.input_weights_scale 
+        #self.W_in = (np.random.rand(input_size, reservoir_size) - 0.5) *self.input_weights_scale 
 
         self.W_reservoir = []
         # self.__reservoir_norm_spectral_radius_norm_weights__()
@@ -36,9 +41,14 @@ class ESN():
         if self.debug: print("W_in: {}".format(self.W_in[:10]))
         if self.debug: print("W_res: {}".format(self.W_reservoir))
 
+        # SOME EXTA STORE DATA
+        self.training_signals = [] # reservoir state over time during training
+
 
     def copy(self):
-        return ESN(self.input_size, self.output_size, self.reservoir_size, self.echo_param, self.spectral_scale, self.init_echo_timesteps)
+        return ESN(self.input_size, self.output_size, self.reservoir_size, self.echo_param, 
+                    self.spectral_scale, self.init_echo_timesteps,
+                    self.regulariser, self.input_weights_scale, self.debug)
 
     def reset_reservoir(self):
         self.reservoir_state = np.zeros((1, self.reservoir_size))
@@ -101,7 +111,8 @@ class ESN():
         for d in data_init:
             # print(d)
             _ = self.__forward_to_res__(np.array([d]))
-        print("-"*10+"INITIAL ECHO TIMESTEPS DONE."+"-"*10)
+
+        if self.debug: print("-"*10+"INITIAL ECHO TIMESTEPS DONE."+"-"*10)
 
         # now train the reservoir data after we have set up the echo state
         y_out = np.zeros((np.shape(data_train_X)[0], self.reservoir_size+self.input_size))
@@ -111,7 +122,7 @@ class ESN():
             y = np.hstack((y, d)) # augment the data with the reservoir data
             # print(np.shape(y))
             y_out[idx, :] = y
-        print("-"*10+"DATA PUT THROUGH RESERVOIR DONE."+"-"*10)
+        if self.debug: print("-"*10+"DATA PUT THROUGH RESERVOIR DONE."+"-"*10)
 
         # do linear regression between the inputs and the output
         X_train = y_out
@@ -120,6 +131,17 @@ class ESN():
         if self.debug: print("y: {}".format((y_target)))
         if self.debug: print("x: {}".format((X_train)))
 
+        # plot some reservoir activations:
+        if self.debug:
+            num_signals = 10
+            length_of_signal = 1000
+            plt.plot(X_train[:length_of_signal, :num_signals])
+            plt.title("Reservoir Signals for SPEC: {}, ECHO: {}".format(self.spectral_scale,
+                        self.echo_param))
+            plt.show()
+        # store training signals for later analysis
+        self.training_signals = X_train
+
         # X_reg = np.vstack((X_train, np.eye(self.reservoir_size+self.input_size)*self.regulariser))
         # y_reg = np.vstack((y_target, np.zeros((self.reservoir_size+self.input_size, 1))))
 
@@ -127,12 +149,12 @@ class ESN():
         lsq_result = np.dot(np.dot(y_target.T, X_train), np.linalg.inv(np.dot(X_train.T,X_train) + \
                         self.regulariser*np.eye(self.input_size+self.reservoir_size)))
         self.W_out = lsq_result[0]
-        print(self.W_out)
+        if self.debug: print(self.W_out)
 
         if self.debug: print("W_out: {}".format(self.W_out))
 
-        print("-"*10+"LINEAR REGRESSION ON OUTPUT DONE."+"-"*10)
-        print("ESN trained!")
+        if self.debug: print("-"*10+"LINEAR REGRESSION ON OUTPUT DONE."+"-"*10)
+        if self.debug: print("ESN trained!")
 
     def predict(self, data, reset_res=False):
         # We do not need to 'initialise' the ESN because the training phase already did this
@@ -154,10 +176,11 @@ class ESN():
         return y_out
         #return data[:,0][:, None] - 0.01
 
-    def generate(self, data, sample_step=None, plot=True, show_error=True):
+    def generate(self, data, MEAN_OF_DATA, sample_step=None, plot=True, show_error=True):
         """ Pass the trained model. """
         # reset the reservoir
         self.reset_reservoir()
+        #print(data)
 
         input_size = self.input_size-1 # -1 because of bias
 
@@ -177,16 +200,29 @@ class ESN():
                 d_bias = np.hstack(([inputs], np.ones((1,1))))
                 output = self.predict(d_bias)
 
-        error = np.array(generated_data) - data[(self.init_echo_timesteps):-input_size]
-        print('MSE generating test: %.7f' % np.mean(error**2))
+        if self.debug: print(np.shape(data[(self.init_echo_timesteps+input_size):]))
+        if self.debug: print(np.shape(np.array(generated_data)[:, None]))
+        if self.debug: print(np.hstack((data[(self.init_echo_timesteps+input_size):], 
+                            np.array(generated_data)[:, None])))
+        #error = np.mean((np.array(generated_data)[:, None] - data[(self.init_echo_timesteps+input_size):])**2)
+        error = self.nmse(data[(self.init_echo_timesteps+input_size):], np.array(generated_data)[:, None], MEAN_OF_DATA)
+        #error_mean = np.mean((np.array(generated_data)[:, None] - data[(1+input_size):])**2)
+        #error_var_2 = np.sum((np.mean(data[(1+input_size):]) - data[(1+input_size):])**2)
+        #error = (1.0 - error_mean/error_var_2)
+        #error = np.mean((np.array(generated_data)[:, None] - data[(1+input_size):])**2)
+
+        if show_error: print('NMSE generating test: %.7f' % error)
+
         if plot:
             xs = range(np.shape(data[self.init_echo_timesteps:])[0] - input_size)
             f, ax = plt.subplots()
             # print(np.shape(xs))
             # print(np.shape(data[(input_size+self.init_echo_timesteps):, 0]))
             #ax.plot(xs, data[(input_size+self.init_echo_timesteps):, 0], label='True data')
-            ax.plot(range(len(generated_data)), data[self.init_echo_timesteps:-input_size, 0], label='True data')
-            ax.plot(range(len(generated_data)), generated_data, label='Generated data')
+            ax.plot(range(len(generated_data)), data[(self.init_echo_timesteps+input_size):, 0], label='True data', c='red')
+            ax.scatter(range(len(generated_data)), data[(self.init_echo_timesteps+input_size):, 0], s=4.5, c='black', alpha=0.5) 
+            ax.plot(range(len(generated_data)), generated_data, label='Generated data', c='blue')
+            ax.scatter(range(len(generated_data)), generated_data, s=4.5, c='black', alpha=0.5)
             # if sample_step is not None:
             #     smp_xs = np.arange(0, len(xs), sample_step)
             #     smp_ys = [data[x+input_size] for x in smp_xs]
@@ -197,10 +233,16 @@ class ESN():
             plt.legend()
             plt.show()
 
+        return error, generated_data
+
 
     def mean_l2_error(self, y_out, y_pred):
-        print(np.hstack((y_out, y_pred)))
+        if self.debug: print(np.hstack((y_out, y_pred)))
         return np.mean((np.array(y_out) - np.array(y_pred))**2)
+
+    def nmse(self, y_out, y_pred, MEAN_OF_DATA):
+        # y_out_mean = np.mean(y_out)
+        return np.sqrt(np.sum((y_out - y_pred)**2)/np.sum((y_out - MEAN_OF_DATA)**2))
 
     def save(self):
         # put this here for now just to remember that it is important to save the reservoir

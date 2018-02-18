@@ -1,4 +1,6 @@
 from collections import OrderedDict
+from copy import deepcopy
+import time
 import torch
 import torch.nn as nn
 import torch.nn.functional as f
@@ -13,12 +15,14 @@ import numpy as np
 class FFNN(nn.Module):
     """
     Feedforward neural network for modelling (chaotic) time series data.
+        (currently only works for 1-dimensional data e.g. MackeyGlass).
 
     Args:
-        input_size:             number of frames of context (data for previous time steps).
-        hidden_size:            number of hidden units per hidden layer.
-        n_hidden_layers:        number of hidden layers (not including input+output layers).
-        activation:             pytorch activation (class, NOT an instance)
+        input_size:             Number of frames of context (data for previous time steps).
+                                 (not to be confused with data dimensionality).
+        hidden_size:            Number of hidden units per hidden layer.
+        n_hidden_layers:        Number of hidden layers (not including input+output layers).
+        activation:             PyTorch activation (class, NOT an instance)
     """
 
     def __init__(self, input_size, hidden_size, n_hidden_layers, activation=None):
@@ -31,6 +35,7 @@ class FFNN(nn.Module):
             activation = nn.Sigmoid
         else:
             assert type(activation) == type, "Pass the TYPE of activation, not an instance of it."
+        self.activ_str = str(activation)[:-2]
 
         layers = OrderedDict()
         layers['linear1'] = nn.Linear(input_size, hidden_size) # input layer
@@ -49,17 +54,22 @@ class FFNN(nn.Module):
     def forward(self, x):
         return self.model(x)
 
-def train(model, train_data, batch_size, num_epochs, criterion, optimizer, valid_data=None, verbose=1):
+def train(model, train_data, batch_size, num_epochs, criterion, optimizer, valid_data=None, 
+          verbose=1, eval_gen_loss=False, n_generate_timesteps=2000):
     input_size = model.input_size
     #assert (len(train_data) - input_size) % batch_size == 0, \
     #            "there is leftover training data that doesn't fit neatly into a batch"
 
     n_iter = int((len(train_data) - input_size) / batch_size)
 
-    if valid_data is not None:
-        stats = torch.FloatTensor(num_epochs, 2)
-    else:
-        stats = torch.FloatTensor(num_epochs, 1)
+    # rows: epoch number. columns: (sup. train nrmse, sup. valid nrmse, gen. train nrmse, 
+    #    gen. valid nrmse). If valid_data not provided, last 3 columns are zeros. 
+    #    Else if eval_gen_loss=False, last two columns zeros.
+    stats = torch.zeros(num_epochs, 4)
+
+    if eval_gen_loss:
+        # 'early stopping': return the model that gives lowest validation generation NRMSE
+        best_model = (None, np.inf, None)
 
     for epoch in range(num_epochs):
         train_loss = 0.
@@ -81,7 +91,9 @@ def train(model, train_data, batch_size, num_epochs, criterion, optimizer, valid
             loss.backward()
             optimizer.step()
 
-            train_loss += loss.data[0]
+            # normalized root mean square error
+            nrmse = np.sqrt(loss.data[0] / __DATA_VAR__)
+            train_loss += nrmse
 
         if criterion.size_average:
             train_loss /= float(n_iter)
@@ -90,9 +102,17 @@ def train(model, train_data, batch_size, num_epochs, criterion, optimizer, valid
         if verbose:
             print('='*50)
             print('Epoch [%d/%d]' % (epoch+1, num_epochs))
-            print('Total training loss: %.7f' % train_loss)
+            print('Total sup. training NRMSE: %.7f' % train_loss)
+
+        # Calculate GENERATION training loss ======================================
+        if eval_gen_loss:
+            gen_outs, nrmse = test(model, train_data[:n_generate_timesteps], plot=False)
+            print('Generation training NRMSE (for %d time steps): %.7f' % \
+                    (n_generate_timesteps, nrmse))
+            stats[epoch, 2] = nrmse
 
         if valid_data is not None:
+            # Calculate SUPERVISED validation loss ================================
             valid_loss = 0.
             for i in range(len(valid_data) - input_size):
                 inputs = valid_data[i:(i+input_size)]
@@ -100,19 +120,38 @@ def train(model, train_data, batch_size, num_epochs, criterion, optimizer, valid
                 target = Variable(torch.FloatTensor([valid_data[i+input_size]]))
 
                 output = model(inputs)
-                valid_loss += criterion(output, target).data[0]
+                mse = criterion(output, target).data[0]
+                nrmse = np.sqrt(mse / __DATA_VAR__)
+                valid_loss += nrmse
 
             if criterion.size_average:
                 valid_loss /= (len(valid_data) - input_size)
 
             stats[epoch, 1] = valid_loss
             if verbose:
-                print('Total validation loss: %.7f' % valid_loss)
+                print('Total sup. validation NRMSE: %.7f' % valid_loss)
 
-    return model, stats
+            if eval_gen_loss:
+                # Now calculate GENERATION validation loss ===========================
+                gen_outs, nrmse = test(model, valid_data[:n_generate_timesteps], plot=False)
+                print('Generation validation NRMSE (for %d time steps): %.7f' % \
+                        (n_generate_timesteps, nrmse))
+                stats[epoch, 3] = nrmse
+                
+                if nrmse <= best_model[1]:
+                    best_model = (deepcopy(model), nrmse, epoch)
+    
+    if eval_gen_loss:
+        return best_model[0], stats
+    else:
+        return model, stats
 
-def test(model, data, sample_step=None, plot=True, show_error=True):
-    """ Pass the trained model. """
+def test(model, data, sample_step=None, plot=True, show_error=True, save_fig=False, title=None):
+    """ 
+    Pass the trained model. 
+    Returns (generated_outputs, generation_nrmse).
+    """
+
     input_size = model.input_size
 
     inputs = data[:input_size] # type(inputs) = list
@@ -130,12 +169,18 @@ def test(model, data, sample_step=None, plot=True, show_error=True):
 
         output = model(Variable(torch.FloatTensor(inputs))).data[0]
         generated_data.append(output)
+    
+    # MSE
+    error = np.mean((np.array(generated_data) - np.array(data[input_size:]))**2)
+    # normalized RMSE
+    error = np.sqrt(error / __DATA_VAR__)
 
-    error = np.array(generated_data) - np.array(data[input_size:])
-    print('MSE: %.7f' % np.mean(error**2))
+    # print('MSE: %.7f' % error)
     if plot:
         xs = range(len(data) - input_size)
         f, ax = plt.subplots()
+        if title is not None:
+            ax.set_title(title)
         ax.plot(xs, data[input_size:], label='True data')
         ax.plot(xs, generated_data, label='Generated data')
         if sample_step is not None:
@@ -146,37 +191,106 @@ def test(model, data, sample_step=None, plot=True, show_error=True):
             ax.plot(xs, error, label='error')
             ax.plot(xs, [0]*len(xs), linestyle='--')
         plt.legend()
+
+        if save_fig:
+            assert title is not None, "Provide a title/filename to save results."
+            f.savefig(title)
         plt.show()
+    
+    return generated_data, error
 
 if __name__ == "__main__":
+    # Experiment settings / parameters ========================================================
+    t = str(time.time()).replace('.', 'p')
+    eval_valid = True # whether or not to evaluate MSE loss on test set during training
+    eval_gener = True # whether or not to generate future values, calculate that MSE loss
+    save_fig = True
+
+    reg = 0. # lambda for L2 regularization 
+
+    n_generate_timesteps = 2000
+    learn_rate = 0.0001
+
+    n_epochs = 50
+    # ========================================================================================
+    # Get data ===============================================================================
     from MackeyGlass.MackeyGlassGenerator import run
-    data = run(num_data_samples=12000)
-    train_data = data[:7000]; valid_data = data[7000:]
-    model = FFNN(input_size=50, hidden_size=100, n_hidden_layers=3, activation=None)
+    data = run(num_data_samples=20000)
+    data_var = np.var(np.array(data))
+    __DATA_VAR__ = np.var(np.array(data))
+
+    train_data = data[:14000]
+    if eval_valid:
+        valid_data = data[14000:]
+    else:
+        valid_data = None
+    
+    # Set up model, loss function, optimizer =================================================
+    model = FFNN(input_size=50, hidden_size=100, n_hidden_layers=2, activation=nn.Sigmoid)
     criterion = nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.005)
-    model, stats = train(model, train_data, 20, 100, criterion, optimizer, valid_data=None, verbose=1)
+    optimizer = torch.optim.Adam(model.parameters(), lr=learn_rate)
+
+    title = "%s__ninputs%d__layers%d__nHU%d__lambda%.5f" \
+            % (t, model.input_size, model.n_hidden_layers, model.hidden_size, reg)
+    title = title.replace('.', 'p') # replace period w/ 'p' so can be used as filename
+    # Train model ============================================================================
+    model, stats = train(model, train_data, 20, n_epochs, criterion, optimizer, 
+                         valid_data=valid_data, verbose=1, eval_gen_loss=True,
+                         n_generate_timesteps=n_generate_timesteps)
+
+    # losses are NORMALIZED ROOT MEAN SQUARE ERROR (not regular MSE)
     train_losses = stats[:, 0].numpy()
-    valid_losses = stats[:, 1].numpy()
-    print('FOR SOME REASON, the training losses seem to increase with number of epochs (after 1st epoch),')
-    print('but validation errors decrease with number of epochs.')
-    print('NOTE: validation error is calculated in "traditional" way, not where the NN feeds its')
-    print('      predictions back in as input for next time step.')
+    if eval_valid:
+        valid_losses = stats[:, 1].numpy()
 
-    f, (ax1, ax2) = plt.subplots(2, 1)
-    xs = range(len(train_losses))
-    ax1.plot(xs, train_losses)
-    ax1.set_title('Training loss per epoch')
-    ax1.set_xlabel('Epoch')
-    ax1.set_ylabel('Loss')
+        f, (ax1, ax2) = plt.subplots(2, 1)
+        xs = range(len(train_losses))
+        ax1.plot(xs, train_losses)
+        ax1.set_title('Training loss per epoch')
+        ax1.set_xlabel('Epoch')
+        ax1.set_ylabel('Loss')
 
-    xs = range(len(valid_losses))
-    ax2.plot(xs, valid_losses)
-    ax2.set_title('Validation loss per epoch')
-    ax2.set_xlabel('Epoch')
-    ax2.set_ylabel('Loss')
-    plt.show()
+        xs = range(len(valid_losses))
+        ax2.plot(xs, valid_losses)
+        ax2.set_title('Validation loss per epoch')
+        ax2.set_xlabel('Epoch')
+        ax2.set_ylabel('Loss')
+        
+        if save_fig:
+            f.savefig('Results/FFNN/FIG__%s__tr-val-loss.pdf' % title)
+        plt.show()
+    else:
+        f, ax = plt.subplots()
+        xs = range(len(train_losses))
+        ax.plot(xs, train_losses)
+        ax.set_title('Training loss per epoch')
+        ax.set_xlabel('Epoch')
+        ax.set_ylabel('Loss')
+    
+        if save_fig:
+            f.savefig('Results/FFNN/FIG__%s__tr-loss.pdf' % title)
 
-    if 1:
-        test(model, valid_data[:500], sample_step=10, show_error=0)
+    if eval_gener:
+        g_title = 'Results/FFNN/FIG__%s__gen-loss.pdf' % title
+        generated_outputs, gen_mse = test(
+            model, valid_data[:n_generate_timesteps], sample_step=None, show_error=0, \
+            save_fig=save_fig, title=g_title
+        )
+
+        gen_mse_normed = gen_mse
+        print('Best validation NRMSE for %d generated values: %.7f' % \
+                (n_generate_timesteps, gen_mse_normed))
+
+        import pickle as pkl
+        to_save = dict()
+        to_save['stats'] = stats
+        to_save['model'] = model
+        to_save['gen_outputs'] = generated_outputs
+        to_save['gen_normed_mse'] = gen_mse_normed
+        to_save['n_generated_timesteps'] = n_generate_timesteps
+        to_save['adam_learn_rate'] = learn_rate
+
+        fname = 'Results/FFNN/PKL__%s.p' % title
+        pkl.dump(to_save, open(fname, 'wb'))
+
 

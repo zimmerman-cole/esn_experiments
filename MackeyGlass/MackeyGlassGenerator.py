@@ -7,13 +7,13 @@ import datetime
 
 # Global variables
     # speed
-move_speed = 0.1
+move_speed = 1.0 
 
     # mackey glass params
-gamma = 1.0
-beta = 2.0
-tau = int(2 / move_speed)
-en = 10.65
+gamma = 0.1
+beta = 0.2
+tau = 17 
+en = 10.
 
 x_history = deque(maxlen=tau)
 
