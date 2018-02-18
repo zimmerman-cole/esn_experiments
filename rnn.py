@@ -46,7 +46,7 @@ class LSTM(nn.Module):
             output_t, (h_n, c_n) = self.rnn(input_t, (h_n, c_n))
             output_t = output_t.view(1, hidden_size)
             output_t = self.linear_out(output_t).view(1, 1, self.input_size)
-            generated_outputs.append(output_t.data.numpy()[0, 0, :])
+            generated_outputs.append(output_t.data.cpu().numpy()[0, 0, :])
 
             input_t = output_t
         
@@ -92,8 +92,8 @@ if __name__ == '__main__':
         optimizer.zero_grad()
         train_outputs = rnn(train_inputs)
         loss = criterion(train_outputs, train_targets)
-        stats[epoch, 0] = loss.data.numpy()[0]
-        print('Training loss: %.6f' % loss.data.numpy()[0])
+        stats[epoch, 0] = loss.data.cpu().numpy()[0]
+        print('Training loss: %.6f' % stats[epoch, 0])
         loss.backward()
         optimizer.step()
 
@@ -104,8 +104,8 @@ if __name__ == '__main__':
         else:
             loss = criterion(Variable(torch.from_numpy(test_data)).cuda(), generated_outputs.double())
 
-        stats[epoch, 1] = loss.data.numpy()[0]
-        print('Test loss: %.6f' % loss.data.numpy()[0])
+        stats[epoch, 1] = loss.data.cpu().numpy()[0]
+        print('Test loss: %.6f' % stats[epoch, 1]) 
 
     # FINAL EPOCH: try generating data as well ====================================
     print('Training finished: running generation tests now.')
@@ -122,8 +122,8 @@ if __name__ == '__main__':
     if display_mode:
         f, ax = plt.subplots(figsize=(12, 12))
         # plot true test target values
-        outputs_plt = test_outputs.data.numpy().squeeze()
-        targets_plt = test_targets.data.numpy().squeeze()
+        outputs_plt = test_outputs.data.cpu().numpy().squeeze()
+        targets_plt = test_targets.data.cpu().numpy().squeeze()
         xs = np.arange(len(outputs_plt))
         ax.plot(xs, targets_plt, label='True')
         ax.plot(xs, outputs_plt, label='Model')
@@ -136,7 +136,7 @@ if __name__ == '__main__':
         ax.plot(xs, stats[:, 1], label='Test loss')
         plt.legend(); plt.show()
     if display_mode:
-        generated_plt = generated_outputs.data.numpy().squeeze()
+        generated_plt = generated_outputs.data.cpu().numpy().squeeze()
         test_plt = test_data.squeeze()
         f, ax = plt.subplots(figsize=(12, 12))
         xs = np.arange(len(test_plt))
@@ -198,17 +198,17 @@ def try_toy_example():
         optimizer.zero_grad()
         train_outputs = seq(train_inputs)
         loss = criterion(train_outputs, train_targets)
-        print('Training loss: %.6f' % loss.data.numpy()[0])
+        print('Training loss: %.6f' % loss.data.cpu().numpy()[0])
         loss.backward()
         optimizer.step()
 
         test_outputs = seq(test_inputs, future=0)
         loss = criterion(test_outputs, test_targets)
-        print('Test loss: %.6f' % loss.data.numpy()[0])
+        print('Test loss: %.6f' % loss.data.cpu().numpy()[0])
         
     f, ax = plt.subplots(figsize=(12, 12))
     # plot true test target values
-    out_plt = test_outputs.data.numpy(); tar_plt = test_targets.data.numpy()
+    out_plt = test_outputs.data.cpu().numpy(); tar_plt = test_targets.data.cpu().numpy()
     ax.plot(np.arange(len(out_plt)), tar_plt, label='True')
     ax.plot(np.arange(len(out_plt)), out_plt, label='Generated')
     plt.legend(); plt.show()
