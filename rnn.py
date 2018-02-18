@@ -62,13 +62,16 @@ def nrmse(y_pred, y_target, DATA_MEAN):
 
 if __name__ == '__main__':
     from MackeyGlass.MackeyGlassGenerator import run
-    data = run(20000) 
+    data = run(21000) 
     DATA_MEAN = np.mean(data)
     
     train_data = np.array(data[:14000]).reshape(-1, 1, 1)
-    test_data = np.array(data[6000:]).reshape(-1, 1, 1)
+    test_data = np.array(data[14000:20000]).reshape(-1, 1, 1)
+    real_test_data = np.array(data[20000:])
+
     # CONSTRUCT TRAINING, TESTING DATA
     if torch.cuda.is_available():
+	print('CUDA available!')
         train_inputs = Variable(torch.from_numpy(train_data[:-1]).float().cuda(), requires_grad=0)
         train_targets = Variable(torch.from_numpy(train_data[1:]).float().cuda(), requires_grad=0)
         test_inputs = Variable(torch.from_numpy(test_data[:-1]).float().cuda(), requires_grad=0)
@@ -108,10 +111,10 @@ if __name__ == '__main__':
             #loss = criterion(Variable(torch.from_numpy(test_data)), generated_outputs.double())
         #else:
             #loss = criterion(Variable(torch.from_numpy(test_data)).cuda(), generated_outputs.double())
-	nrmse_sup_train = nrmse(train_outputs.cpu().data.numpy(), train_targets.cpu().data.numpy(), DATA_MEAN)
-	nrmse_sup_test = nrmse(test_outputs.cpu().data.numpy(), test_targets.cpu().data.numpy(), DATA_MEAN)
-	nrmse_gen_train = nrmse(train_gen.cpu().data.numpy(), train_targets.cpu().data.numpy(), DATA_MEAN)
-	nrmse_gen_test = nrmse(test_gen.cpu().data.numpy(), test_targets.cpu().data.numpy(), DATA_MEAN)
+        nrmse_sup_train = nrmse(train_outputs.cpu().data.numpy(), train_targets.cpu().data.numpy(), DATA_MEAN)
+        nrmse_sup_test = nrmse(test_outputs.cpu().data.numpy(), test_targets.cpu().data.numpy(), DATA_MEAN)
+        nrmse_gen_train = nrmse(train_gen.cpu().data.numpy(), train_targets.cpu().data.numpy(), DATA_MEAN)
+        nrmse_gen_test = nrmse(test_gen.cpu().data.numpy(), test_targets.cpu().data.numpy(), DATA_MEAN)
 
         #stats[epoch, 1] = loss.data.cpu().numpy()[0]
         #print('Test loss: %.6f' % stats[epoch, 1]) 
