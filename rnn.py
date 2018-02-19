@@ -207,7 +207,7 @@ class Sequence(nn.Module):
 
     def __init__(self):
         super(Sequence, self).__init__()
-        self.hidden_size = 100
+        self.hidden_size = 50
         self.num_hid_layers = 1
         self.layers = OrderedDict()
         self.layers['sigmoid'] = nn.Linear(1, self.hidden_size)
@@ -278,6 +278,43 @@ class Sequence(nn.Module):
         outputs = torch.stack(outputs, 0).squeeze(2)
         return outputs
 
+def load_and_run_model(file_name):
+    model = pkl.load(open(file_name, "rb"))
+    (seq, gen_train_loss, gen_test_loss, epoch) = model
+    print("MODEL LOADED")
+
+    from MackeyGlass.MackeyGlassGenerator import run
+    data = run(21000)
+    data -= np.mean(data)
+    DATA_MEAN = np.mean(data)
+    print("DATA LOADED")
+
+    train_data = np.array(data[:14000])
+    train_inputs = Variable(torch.from_numpy(train_data.reshape(-1, 1)), requires_grad=0)
+    test_data = np.array(data[14000:20000])
+    test_targets = Variable(torch.from_numpy(test_data.reshape(-1, 1)), requires_grad=0)
+    val_data = np.array(data[20000:])
+    val_targets = Variable(torch.from_numpy(val_data.reshape(-1, 1)), requires_grad=0)
+
+    pre_val_inputs = Variable(torch.from_numpy(np.array(data[:20000]).reshape(-1, 1)), requires_grad=0)
+
+    gen_train_outs = seq.forward(train_inputs[:4000], future=2000).data.numpy()
+    gen_train_loss = nrmse(gen_train_outs[4000:], train_inputs[4000:6000].data.numpy(), DATA_MEAN)
+    print('!! Gen Train loss: {}'.format(gen_train_loss))
+    
+    gen_test_outs = seq.forward(train_inputs, future=2000).data.numpy()
+    gen_test_loss = nrmse(gen_test_outs[14000:], test_targets.data.numpy()[:2000], DATA_MEAN)
+    print('!! Gen Test loss: {}'.format(gen_test_loss))
+
+    gen_val_outs = seq.forward(pre_val_inputs, future=1000).data.numpy()
+    gen_val_loss = nrmse(gen_val_outs[20000:], val_targets.data.numpy()[:1000], DATA_MEAN)
+    print('!! Gen Val loss: {}'.format(gen_val_loss))
+
+    plt.plot(range(len(data)), data, label="T")
+    plt.plot(range(len(gen_val_outs)), gen_val_outs,  label="G")
+    plt.legend()
+    plt.show()
+
 def try_toy_example():
     from MackeyGlass.MackeyGlassGenerator import run
     data = run(20000)
@@ -294,7 +331,7 @@ def try_toy_example():
     seq.double() # ??? what does this do?
 
     criterion = nn.MSELoss()
-    optimizer = optim.Adam(seq.parameters(), lr=0.001)
+    optimizer = optim.Adam(seq.parameters(), lr=0.01)
 
     bestGenTrain = 1000
     bestGenTest = 1000
@@ -318,17 +355,17 @@ def try_toy_example():
         print('Test loss: %.6f' % loss.data.cpu().numpy()[0])
         
         if i % 5 == 0:
-            gen_outs = seq.forward(train_inputs[:100], future=2000).data.numpy()
-            gen_train_loss = nrmse(gen_outs[100:], train_targets.data.numpy()[100:2100], DATA_MEAN)
+            gen_outs = seq.forward(train_inputs[:4000], future=2000).data.numpy()
+            gen_train_loss = nrmse(gen_outs[4000:], train_targets.data.numpy()[4000:6000], DATA_MEAN)
             print('!! Gen Train loss: {}'.format(gen_train_loss))
 
-            gen_outs = seq.forward(test_inputs[:100], future=2000).data.numpy()
-            gen_test_loss = nrmse(gen_outs[100:], test_targets.data.numpy()[100:2100], DATA_MEAN)
+            gen_outs = seq.forward(train_targets[-4000:], future=2000).data.numpy()
+            gen_test_loss = nrmse(gen_outs[4000:], test_inputs.data.numpy()[:2000], DATA_MEAN)
             print('!! Gen Test loss: {}'.format(gen_test_loss))
 
             if gen_test_loss <= bestModel[2]:
                 bestModel = (deepcopy(seq), gen_train_loss, gen_test_loss, i)
-                pkl.dump(bestModel, open("bestModel.pkl", "wb"))
+                pkl.dump(bestModel, open("bestModel_50hids.pkl", "wb"))
                 print("---BEST SAVED")
 
     f, ax = plt.subplots(figsize=(12, 12))
@@ -371,6 +408,7 @@ def try_toy_example():
 
 if __name__ == '__main__':
     try_toy_example()
+    #load_and_run_model("bestModel.pkl")
 
 
 
