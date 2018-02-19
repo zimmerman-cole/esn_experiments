@@ -9,6 +9,7 @@ class ESN():
                 regulariser=1e-8, input_weights_scale=(1/100.),
                 debug_mode=False):
 
+        #np.random.seed(42)
         # ARCHITECTURE PARAMS
         self.input_size = input_size
         self.reservoir_size = reservoir_size
