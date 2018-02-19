@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # because ESN are stochastic, this will train a ESN multiple times and compute the average MSE
-def ESN_stochastic_train(data, train_split, esn, num_runs, MEAN_OF_DATA, seed=None):
+def ESN_stochastic_train(data, train_split, val_split, esn, num_runs, MEAN_OF_DATA, seed=None):
 
     data_train = data[:train_split]
     #print(np.shape(data_train))
@@ -27,7 +27,7 @@ def ESN_stochastic_train(data, train_split, esn, num_runs, MEAN_OF_DATA, seed=No
     # check we have made the data correctly
    # assert data_train_X[13, 0] == data_train_y[12], "training data is not correctly made!"
 
-    data_test = data[train_split:]
+    data_test = data[train_split:val_split]
     #data_test_X = np.hstack((data_test[:-1], np.ones((np.shape(data_test)[0]-1, 1))))
     #data_test_y = data_test[1:]
 
@@ -41,6 +41,8 @@ def ESN_stochastic_train(data, train_split, esn, num_runs, MEAN_OF_DATA, seed=No
 
     data_test_X = np.hstack((data_test_X, np.ones((np.shape(data_test_X)[0], 1))))
 
+    data_val = data[val_split:]
+
     # check we have made the data correctly
    # assert data_test_X[24, 0] == data_test_yoffsets23], "teblock_offsets data is not correctly made!"
 
@@ -48,6 +50,7 @@ def ESN_stochastic_train(data, train_split, esn, num_runs, MEAN_OF_DATA, seed=No
     nmse_train = []
     gen_test = []
     gen_train = []
+    gen_val = []
     for e in range(num_runs):
         esn_copy = esn.copy()
         esn_copy.train(data_train_X, data_train_y)
@@ -74,13 +77,17 @@ def ESN_stochastic_train(data, train_split, esn, num_runs, MEAN_OF_DATA, seed=No
         gen_err_test, generated_data_test = esn_copy.generate(data_test[:2000], MEAN_OF_DATA, plot=False, show_error=False)
         gen_err_train, generated_data_train = esn_copy.generate(data_train[:2000], MEAN_OF_DATA, plot=False, show_error=False)
 
+        gen_err_val, generated_data_val = esn_copy.generate(data_val, MEAN_OF_DATA, plot=False, show_error=False)
+
         #mean_gen_test += gen_err_test
         #mean_gen_train += gen_err_train
         gen_test.append(gen_err_test)
         gen_train.append(gen_err_train)
+        gen_val.append(gen_err_val)
 
         print("iter: {} -- NRMSE (SUP) Error TEST: {}, TRAIN: {}".format(e, mse_test, mse_train))
         print("iter: {} -- NRMSE (GEN) Error TEST: {}, TRAIN: {}".format(e, gen_err_test, gen_err_train))
+        print("iter: {} -- NRMSE (GEN) Error VAL: {}".format(e, gen_err_val))
 
     #g_data = [generated_data, generated_data, generated_data, generated_data]
     #d = data_test[(esn_copy.init_echo_timesteps+esn_copy.input_size-1):1000, 0]
@@ -103,11 +110,15 @@ def ESN_stochastic_train(data, train_split, esn, num_runs, MEAN_OF_DATA, seed=No
     mean_gen_train = np.mean(gen_train)
     std_gen_train = np.std(gen_train) / np.sqrt(len(gen_train))
 
+    mean_gen_val = np.mean(gen_val)
+    std_gen_val = np.std(gen_val) / np.sqrt(len(gen_val))
 
     print("\n\nFINAL -- Supervised Mean L2 Error TEST: {} +- {:.6f}, TRAIN: {} +- {:.6f}".format(
             mean_mse_test, std_mse_test, mean_mse_train, std_mse_train))
     print("\n\nFINAL -- Generative Mean L2 Error TEST: {} +- {:.6f}, TRAIN: {} +- {:.6f}".format(
             mean_gen_test, std_gen_test, mean_gen_train, std_gen_train))
+    print("\n\nFINAL -- Generative Mean L2 Error VAL: {} +- {:.6f}".format(
+            mean_gen_val, std_gen_val))
 
     return gen_err_test, generated_data_test, data_test[(esn_copy.init_echo_timesteps+esn.input_size-1):2000,0], esn_copy.training_signals
 
@@ -151,7 +162,9 @@ def fancy_plot_signals(signals_data, num_rows, num_cols, titles=[]):
 
 
 if __name__ == "__main__":
-    data = np.array([run(20000)]).T
+    data = np.array([run(21100)]).T
+    # data_train_test = data[:20000]
+    # data_val = data[20000:]
     #data = np.loadtxt('../../../MackeyGlass_t17.txt')
     #data -= np.mean(data)
     #data += 100.0
@@ -171,21 +184,35 @@ if __name__ == "__main__":
     training_signals = []
     # run a few test of different hyperparameters
     count = 0
-    for e in [0.8, 0.83, 0.85]:
+    for e in [0.85]:
         for r in [1000]:
-            for reg in [1e-5, 1e-6]:
-                for s in [1.22, 1.25, 1.27]:
+            for reg in [1e-6]:
+                for s in [1.25]:
                     for a in [1/1.]:
                         print("EXPERIMENT - ECHO {}, RES {}, REG {}, SPECT {}, W_IN {}".format(e, r, reg, s, a))
                         esn = ESN(input_size=2, output_size=1, reservoir_size=r, echo_param=e, spectral_scale=s, 
                                     init_echo_timesteps=100,regulariser=reg, input_weights_scale=a, debug_mode=False)
-                        gen_err, g_, a_, signals_ = ESN_stochastic_train(data, 14000, esn, 4, MEAN_OF_DATA)
+                        gen_err, g_, a_, signals_ = ESN_stochastic_train(data, 14000, 20000, esn, 1, MEAN_OF_DATA)
                         g_data.append(g_)
                         a_data.append(a_)
                         titles.append(("ECHO: {:.2f}, SPEC: {:.2f}, REG: {}, W-IN: {}".format(e, s, reg, a)))
                         training_signals.append(signals_[:1000, :10])
                         count += 1
                         print("COUNT: {}".format(count))
+
+                        # f, ax = plt.subplots()
+                        # ax.plot(range(len(g_)),  a_, label='True data', c='red')
+                        # ax.scatter(range(len(g_)),  a_, s=4.5, c='black', alpha=0.5) 
+                        # ax.plot(range(len(g_)),  g_, label='Generated data', c='blue')
+                        # ax.scatter(range(len(g_)),  g_, s=4.5, c='black', alpha=0.5)
+
+                        # residual = a_ - g_
+                        # ax.plot(range(len(residual)), residual, c='green', label='error')
+                        # ax.plot(range(len(residual)), np.zeros(len(residual)), c='r', linestyle='--')
+
+                        # plt.legend()
+                        # plt.show()
+
 
 
     # plot the generated data versus actual data of the ESNs
