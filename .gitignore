@@ -1,4 +1,7 @@
 *.pyc
-*__pycache__
-*.swp
 .ipynb_checkpoints
+*.swp
+*.swo
+*__pycache__
+outfile
+errfile
