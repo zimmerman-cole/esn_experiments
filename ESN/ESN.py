@@ -184,6 +184,130 @@ class ESN(object):
         self.W_out = np.dot(T1, T2)                                               # L     x (N+K)
 
 
+class LCESN(object):
+    """
+    Layered constrained echo state network (LCESN).
+
+    |       Argument      |       dtype        |  Description
+    -------------------------------------------------------------------------------|
+    |         input_size  |  int               | Dimensionality of input signal.   |
+    |         output_size |  int               | Dimensionality of output signal.  |
+    |      num_reservoirs |  int               | Number of reservoirs.             |
+    |     reservoir_sizes |  int   OR [int]    | Size of all reservoirs, OR a list |
+    |                     |                    |   containing each of their sizes. |
+    |         echo_params |  float OR [float]  | Echo parameter of all reservoirs, |
+    |                     |                    |   or list with each echo param.   |
+    |   output_activation |  function          | Output layer activation.          |
+    | init_echo_timesteps |  int               | Number of timesteps to 'warm up'  |
+    |                     |                    |   model.                          |
+    |         regulariser |  float             | Regularization strength (lambda). |
+    |               debug |  bool              | Debug information.                |
+    -------------------------------------------------------------------------------
+
+
+    """
+
+    def __init__(self, input_size, output_size, num_reservoirs, reservoir_sizes=None,
+                 echo_params=0.6, output_activation=None, init_echo_timesteps=100,
+                 regulariser=1e-8, debug=False):
+        # IMPLEMENTATION STUFF ===================================================
+        if input_size != output_size:
+            raise NotImplementedError('num input dims must equal num output dims.')
+        if output_activation is not None:
+            raise NotImplementedError('non-identity output activations not implemented.')
+        # ========================================================================
+        self.K = input_size
+        self.L = output_size
+        self.num_reservoirs = num_reservoirs
+        self.reservoirs = []
+
+        if reservoir_sizes is None:
+            reservoir_sizes = [int(np.ceil(1000. / num_reservoirs))]*num_reservoirs
+        elif type(reservoir_sizes) is not list:
+            reservoir_sizes = [reservoir_sizes]*num_reservoirs
+        if type(echo_params) is not list:
+            echo_params = [echo_params]*num_reservoirs
+
+        self.reservoirs.append(Reservoir(input_size, reservoir_sizes[0], echo_params[0],
+                                         idx=0, debug=debug))
+        for i, (size, echo_prm) in enumerate(zip(reservoir_sizes, echo_params)[1:]):
+            self.reservoirs.append(Reservoir(
+                input_size=self.reservoirs[-1].N, num_units=size, echo_param=echo_prm,
+                idx=i+1, debug=debug
+            ))
+
+        self.regulariser = regulariser
+        self.init_echo_timesteps = init_echo_timesteps
+        self.debug = debug
+        if output_activation is None:
+            def iden(x): return x
+            output_activation = iden
+        self.output_activation = output_activation
+
+        self.N = sum(reservoir_sizes)
+
+        self.W_out = np.ones((self.L, self.K+self.N))
+
+    def initialize_input_weights(self, strategies='binary', scales=1e-2):
+        if type(strategies) is not list:
+            strategies = [strategies]*self.num_reservoirs
+        if type(scales) is not list:
+            scales = [scales]*self.num_reservoirs
+
+        for i, (strat, scale) in enumerate(zip(strategies, scales)):
+            self.reservoirs[i].initialize_input_weights(strat, scale)
+
+    def initialize_reservoir_weights(self, strategies='uniform', spectral_scales=1.0):
+        if type(strategies) is not list:
+            strategies = [strategies]*self.num_reservoirs
+        if type(spectral_scales) is not list:
+            spectral_scales = [spectral_scales]*self.num_reservoirs
+
+        for i, (strat, scale) in enumerate(zip(strategies, spectral_scales)):
+            self.reservoirs[i].initialize_reservoir_weights(strat, scale)
+
+    def forward(self, u_n, calculate_output=True):
+        u_n = u_n.squeeze()
+        assert (self.K == 1 and u_n.shape == ()) or len(u_n) == self.K
+
+        x_n = np.zeros(0)
+        inputs = u_n
+        for reservoir in self.reservoirs:
+            inputs = reservoir.forward(inputs)
+            x_n = np.append(x_n, inputs)
+
+        if calculate_output:
+            z_n = np.append(x_n, u_n)
+            output = self.output_activation(np.dot(self.W_out, z_n))
+            return output.squeeze()
+        else:
+            return x_n
+
+    def train(self, X, y):
+        assert X.shape[1] == self.K, "training data has unexpected dimensionality (%s); K = %d" % (X.shape, self.K)
+        X = X.reshape(-1, self.K)
+        y = y.reshape(-1, self.L)
+
+        # First, run a few inputs into the reservoir to get it echoing
+        initial_data = X[:self.init_echo_timesteps]
+        for u_n in initial_data:
+            _ = self.forward(u_n, calculate_output=False)
+
+        # Now train the output weights
+        X_train = X[self.init_echo_timesteps:]
+        D = y[self.init_echo_timesteps:]
+        S = np.zeros((X_train.shape[0], self.N+self.K))
+        for n, u_n in enumerate(X_train):
+            x_n = self.forward(u_n, calculate_output=False)
+            z_n = np.append(x_n, u_n)
+            S[n, :] = z_n
+
+        # Solve linear system
+        T1 = np.dot(D.T, S)
+        T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye(self.K + self.N))
+        self.W_out = np.dot(T1, T2)
+
+
 class ESN2(object):
     """
     Echo state network  -------------OLD ONE-----------------.
