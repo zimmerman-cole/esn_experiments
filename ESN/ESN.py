@@ -183,10 +183,10 @@ class ESN(object):
         T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye(self.K + self.N))  # (N+K) x (N+K)
         self.W_out = np.dot(T1, T2)                                               # L     x (N+K)
 
-
-class LCESN(object):
+class LayeredESN(object):
     """
-    Layered constrained echo state network (LCESN).
+    (ABSTRACT CLASS)
+    Layered echo state network (LESN).
 
     |       Argument      |       dtype        |  Description
     -------------------------------------------------------------------------------|
@@ -228,17 +228,19 @@ class LCESN(object):
         if type(echo_params) is not list:
             echo_params = [echo_params]*num_reservoirs
 
-        self.reservoirs.append(Reservoir(input_size, reservoir_sizes[0], echo_params[0],
-                                         idx=0, debug=debug))
-        for i, (size, echo_prm) in enumerate(zip(reservoir_sizes, echo_params)[1:]):
-            self.reservoirs.append(Reservoir(
-                input_size=self.reservoirs[-1].N, num_units=size, echo_param=echo_prm,
-                idx=i+1, debug=debug
-            ))
+        self.debug = debug
+        # self.reservoirs.append(Reservoir(input_size, reservoir_sizes[0], echo_params[0],
+        #                                  idx=0, debug=debug))
+        # for i, (size, echo_prm) in enumerate(zip(reservoir_sizes, echo_params)[1:]):
+        #     self.reservoirs.append(Reservoir(
+        #         input_size=self.reservoirs[-1].N, num_units=size, echo_param=echo_prm,
+        #         idx=i+1, debug=debug
+        #     ))
+        self.__reservoir_input_size_rule__(reservoir_sizes, echo_params)
 
         self.regulariser = regulariser
         self.init_echo_timesteps = init_echo_timesteps
-        self.debug = debug
+
         if output_activation is None:
             def iden(x): return x
             output_activation = iden
@@ -266,15 +268,23 @@ class LCESN(object):
         for i, (strat, scale) in enumerate(zip(strategies, spectral_scales)):
             self.reservoirs[i].initialize_reservoir_weights(strat, scale)
 
+    def __forward_routing_rule__(self, inputs):
+        ''' 
+        Abstract function describing how the inputs are passed from layer to layer.
+        Just returning the inputs will result in no forward rule. 
+        The next-reservoir parameter allows you to pass in an reservoir and utilise its function to update the input.
+        '''
+        pass
+
+    def __reservoir_input_size_rule__(self):
+        pass
+
     def forward(self, u_n, calculate_output=True):
         u_n = u_n.squeeze()
         assert (self.K == 1 and u_n.shape == ()) or len(u_n) == self.K
 
-        x_n = np.zeros(0)
         inputs = u_n
-        for reservoir in self.reservoirs:
-            inputs = reservoir.forward(inputs)
-            x_n = np.append(x_n, inputs)
+        x_n = self.__forward_routing_rule__(inputs)
 
         if calculate_output:
             z_n = np.append(x_n, u_n)
@@ -306,6 +316,54 @@ class LCESN(object):
         T1 = np.dot(D.T, S)
         T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye(self.K + self.N))
         self.W_out = np.dot(T1, T2)
+
+class LCESN(LayeredESN):
+    def __init__(self, input_size, output_size, num_reservoirs, reservoir_sizes=None,
+                 echo_params=0.6, output_activation=None, init_echo_timesteps=100,
+                 regulariser=1e-8, debug=False):
+        super(LCESN, self).__init__(input_size, output_size, num_reservoirs, reservoir_sizes, echo_params,
+                                    output_activation, init_echo_timesteps, regulariser, debug)
+    
+    def __reservoir_input_size_rule__(self, reservoir_sizes, echo_params):
+        self.reservoirs.append(Reservoir(self.K, reservoir_sizes[0], echo_params[0],
+                                         idx=0, debug=self.debug))
+        for i, (size, echo_prm) in enumerate(zip(reservoir_sizes, echo_params)[1:]):
+            self.reservoirs.append(Reservoir(
+                input_size=self.reservoirs[-1].N, num_units=size, echo_param=echo_prm,
+                idx=i+1, debug=self.debug
+            ))
+
+    def __forward_routing_rule__(self, inputs):
+        x_n = np.zeros(0)
+        for reservoir in self.reservoirs:
+            inputs = reservoir.forward(inputs)
+            x_n = np.append(x_n, inputs)
+
+        return x_n
+
+class EESN(LayeredESN):
+
+    def __init__(self, input_size, output_size, num_reservoirs, reservoir_sizes=None,
+                 echo_params=0.6, output_activation=None, init_echo_timesteps=100,
+                 regulariser=1e-8, debug=False):
+        super(EESN, self).__init__(input_size, output_size, num_reservoirs, reservoir_sizes, echo_params,
+                                    output_activation, init_echo_timesteps, regulariser, debug)
+
+    def __reservoir_input_size_rule__(self, reservoir_sizes, echo_params):
+        for i, (size, echo_prm) in enumerate(zip(reservoir_sizes, echo_params)):
+            self.reservoirs.append(Reservoir(
+                input_size=self.K, num_units=size, echo_param=echo_prm,
+                idx=i+1, debug=self.debug
+            ))
+
+
+    def __forward_routing_rule__(self, inputs):
+        x_n = np.zeros(0)
+        for reservoir in self.reservoirs:
+            output = reservoir.forward(inputs)
+            x_n = np.append(x_n, output)
+
+        return x_n
 
 
 class ESN2(object):
