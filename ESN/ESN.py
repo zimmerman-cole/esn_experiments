@@ -102,12 +102,15 @@ class Reservoir(object):
         assert self.res_init, "Res. recurrent weights not yet initialized (ID=%d)." % self.idx
 
         in_to_res = np.dot(self.W_in, u_n).squeeze()
-        res_to_res = np.dot(self.W_res, self.state).squeeze()
+        res_to_res = np.dot(self.state.reshape(1, -1), self.W_res)
+        #res_to_res = np.dot(self.W_res, self.state.reshape(-1, 1)).squeeze()
 
+        old_state = self.state
         # Equation (1) in "Formalism and Theory" of Scholarpedia page
         self.state = (1. - self.echo_param) * self.state + self.echo_param * self.activation(in_to_res + res_to_res)
 
-        return self.state.squeeze(), in_to_res, res_to_res
+        return self.state.squeeze()
+
 
 class ESN(object):
 
@@ -134,25 +137,23 @@ class ESN(object):
 
         self.W_out = np.ones((self.L, self.K+self.N))   # output weights
 
-
     def initialize_input_weights(self, strategy='binary', scale=1e-2):
         self.reservoir.initialize_input_weights(strategy, scale)
 
     def initialize_reservoir_weights(self, strategy='uniform', spectral_scale=1.0, offset=0.5):
         self.reservoir.initialize_reservoir_weights(strategy, spectral_scale, offset)
 
-    def forward(self, u_n, debug=False):
+    def forward(self, u_n):
         u_n = u_n.squeeze()
         assert (self.K == 1 and u_n.shape == ()) or len(u_n) == self.K
 
         x_n = self.reservoir.forward(u_n)  # reservoir states at time n
-        if debug: print('NEW x(n) shape: ' + str(x_n.shape))
         z_n = np.append(x_n, u_n)          # extended system states at time n
-        if debug: print('NEW z(n) shape: ' + str(z_n.shape))
 
         # by default, output activation is identity
+        # output = self.output_activation(np.dot(z_n, self.W_out.T))
         output = self.output_activation(np.dot(self.W_out, z_n))
-        if debug: print('NEW output shape: ' + str(output.shape))
+
         return output.squeeze()
 
     def train(self, X, y):
@@ -178,11 +179,10 @@ class ESN(object):
         if self.debug: print('-'*10+'Extended system states collected.'+'-'*10)
 
         # Solve (W_out)(S.T) = (D) by least squares
-        print('NEW' + '='*20)
         T1 = np.dot(D.T, S)                                                       # L     x (N+K)
-        T2 = la.inv(np.dot(S.T, S)) + self.regulariser * np.eye(self.K + self.N)  # (N+K) x (N+K)
+        T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye(self.K + self.N))  # (N+K) x (N+K)
         self.W_out = np.dot(T1, T2)                                               # L     x (N+K)
-        return S, D
+
 
 class ESN2(object):
     """
@@ -247,7 +247,6 @@ class ESN2(object):
         # SOME EXTA STORE DATA
         self.training_signals = [] # reservoir state over time during training
 
-
     def copy(self):
         return ESN2(self.input_size, self.output_size, self.reservoir_size, self.echo_param,
                     self.spectral_scale, self.init_echo_timesteps,
@@ -294,15 +293,15 @@ class ESN2(object):
         res_to_res = np.dot(self.reservoir_state, self.W_reservoir)
 
         assert np.shape(in_to_res) == np.shape(res_to_res), "in-to-res input is {} whereas res-to-res input is {}".format(np.shape(in_to_res), np.shape(res_to_res))
-        
+
         # E = echo parameter; f = activation function
         # x(n+1) = (1 - E) x(n) + E f(W x(n) + W_in u(n+1))
         self.reservoir_state = (1.0 - self.echo_param)*self.reservoir_state + self.echo_param*self.activation_function(in_to_res + res_to_res)
         
         #res_to_out = np.dot(self.reservoir_state, self.W_out)
-        return self.reservoir_state.squeeze(), in_to_res, res_to_res
+        return self.reservoir_state.squeeze()
 
-    def forward_to_out(self, x_in, debug=False):
+    def forward_to_out(self, x_in):
         """
         x_in = u(n).
         Puts input signal u(n) into reservoir; gets updated reservoir states x(n).
@@ -313,15 +312,13 @@ class ESN2(object):
 
         # print(np.shape(x_in))
         res_out = np.array(self.__forward_to_res__(np.array([x_in])))
-        if debug: print('OLD x(n) shape: ' + str(res_out.shape))
+        x_n = res_out
         res_out = np.hstack((res_out, x_in)) # augment the data with the reservoir data
-        if debug: print('OLD z(n) shape: ' + str(res_out.shape))
         # print(np.shape(res_out))
         assert np.shape(res_out)[0] == np.shape(self.W_out)[0], "res output is {}, whereas expected weights are {}".format(np.shape(res_out), np.shape(self.W_out))
 
         # z(n): (N+K); W_out.T: ((N+K)xL); y(n) = z(n) W_out.T
         res_to_out = np.dot(res_out, self.W_out)
-        if debug: print('OLD output shape: ' + str(res_to_out.shape) )
 
         return res_to_out
 
@@ -373,7 +370,7 @@ class ESN2(object):
         # y_reg = np.vstack((y_target, np.zeros((self.reservoir_size+self.input_size, 1))))
 
         # lsq_result = np.linalg.lstsq(X_reg, y_reg)
-        T1 = np.dot(y_target.T, X_train)
+        T1 = np.dot(X_train.T, X_train) + self.regulariser*np.eye(self.input_size+self.reservoir_size)
         T2 = la.inv(np.dot(X_train.T, X_train) + self.regulariser*np.eye(self.input_size + self.reservoir_size))
         lsq_result = np.dot(np.dot(y_target.T, X_train), np.linalg.inv(np.dot(X_train.T,X_train) + \
                         self.regulariser*np.eye(self.input_size+self.reservoir_size)))
@@ -384,8 +381,6 @@ class ESN2(object):
 
         if self.debug: print("-"*10+"LINEAR REGRESSION ON OUTPUT DONE."+"-"*10)
         if self.debug: print("ESN trained!")
-
-        return X_train, y_target
 
     def predict(self, data, reset_res=False):
         # We do not need to 'initialise' the ESN because the training phase already did this
