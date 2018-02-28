@@ -183,10 +183,10 @@ class ESN(object):
         T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye(self.K + self.N))  # (N+K) x (N+K)
         self.W_out = np.dot(T1, T2)                                               # L     x (N+K)
 
-
-class LCESN(object):
+class LayeredESN(object):
     """
-    Layered constrained echo state network (LCESN).
+    (ABSTRACT CLASS)
+    Layered echo state network (LESN).
 
     |       Argument      |       dtype        |  Description
     -------------------------------------------------------------------------------|
@@ -266,15 +266,20 @@ class LCESN(object):
         for i, (strat, scale) in enumerate(zip(strategies, spectral_scales)):
             self.reservoirs[i].initialize_reservoir_weights(strat, scale)
 
+    def __forward_routing_rule__(self, inputs):
+        ''' 
+        Abstract function describing how the inputs are passed from layer to layer.
+        Just returning the inputs will result in no forward rule. 
+        The next-reservoir parameter allows you to pass in an reservoir and utilise its function to update the input.
+        '''
+        pass
+
     def forward(self, u_n, calculate_output=True):
         u_n = u_n.squeeze()
         assert (self.K == 1 and u_n.shape == ()) or len(u_n) == self.K
 
-        x_n = np.zeros(0)
         inputs = u_n
-        for reservoir in self.reservoirs:
-            inputs = reservoir.forward(inputs)
-            x_n = np.append(x_n, inputs)
+        x_n = self.__forward_routing_rule__(inputs)
 
         if calculate_output:
             z_n = np.append(x_n, u_n)
@@ -306,6 +311,26 @@ class LCESN(object):
         T1 = np.dot(D.T, S)
         T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye(self.K + self.N))
         self.W_out = np.dot(T1, T2)
+
+class LCESN(LayeredESN):
+
+    def __forward_routing_rule__(self, inputs):
+        x_n = np.zeros(0)
+        for reservoir in self.reservoirs:
+            inputs = reservoir.forward(inputs)
+            x_n = np.append(x_n, inputs)
+
+        return x_n
+
+class EESN(LayeredESN):
+
+    def __forward_routing_rule__(self, inputs):
+        x_n = np.zeros(0)
+        for reservoir in self.reservoirs:
+            output = reservoir.forward(inputs)
+            x_n = np.append(x_n, output)
+
+        return x_n
 
 
 class ESN2(object):
