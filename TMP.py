@@ -51,7 +51,7 @@ st_time = time.time()
 NEW_ESN.train(X_train, y_train)
 print('NEW ESN TRAINED. TOOK %.3f SEC' % (time.time() - st_time))
 
-print('success?', (OLD_ESN.W_out == NEW_ESN.W_out))
+#print('success?', (OLD_ESN.W_out == NEW_ESN.W_out))
 
 # diffs = (NEW_ESN.W_out - OLD_ESN.W_out).flatten()
 
@@ -70,13 +70,18 @@ new_outputs = np.array(new_outputs).squeeze()
 #print(old_outputs.shape)
 #print(old_outputs.shape, old_outputs[0].shape, old_outputs[0])
 
-if 1:
-    f, axarr = plt.subplots(3, 1, sharex=True, sharey=True, figsize=(12, 12))
-    axarr[0].plot(range(len(old_outputs)), old_outputs, label='old')
-    axarr[1].plot(range(len(new_outputs)), new_outputs, label='new')
-    axarr[2].plot(range(len(y_test)), y_test, label='true')
-    plt.legend(); plt.show()
-    f.close()
+# if 1:
+#     f, axarr = plt.subplots(1, 1, sharex=True, sharey=True, figsize=(12, 12))
+#     axarr[0].plot(range(len(old_outputs)), old_outputs, label='old')
+#     axarr[1].plot(range(len(new_outputs)), new_outputs, label='new')
+#     axarr[2].plot(range(len(y_test)), y_test, label='true')
+#     plt.legend(); plt.show()
+#     f.close()
+fig, ax = plt.subplots()
+ax.plot(range(len(old_outputs)), old_outputs, label='old')
+ax.plot(range(len(new_outputs)), new_outputs, label='new')
+ax.plot(range(len(y_test)), y_test, label='true')
+plt.show()
 
 
 
