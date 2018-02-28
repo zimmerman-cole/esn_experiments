@@ -1,5 +1,7 @@
 import numpy as np
+import numpy.linalg as la
 import pickle as pkl
+import time
 import matplotlib.pyplot as plt
 
 """
@@ -20,9 +22,171 @@ Notes (from scholarpedia):
         (1) todo
 """
 
-class ESN(object):
+class Reservoir(object):
     """
-    Echo state network.
+    input_size (K): input signal is K dimensions.
+    num_units  (N): reservoir has N units.
+    """
+
+    def __init__(self, input_size, num_units, echo_param=0.6, idx=None, debug=False):
+        self.K = input_size
+        self.N = num_units
+        self.echo_param = echo_param
+        self.activation = np.tanh
+        self.idx = idx                # <- can assign reservoir a unique ID for debugging
+        self.debug = debug
+
+        # input-to-reservoir, reservoir-to-reservoir weights (not yet initialized)
+        self.W_in = np.zeros((self.N, self.K))
+        self.W_res = np.zeros((self.N, self.N))
+        self.state = np.zeros(self.N)             # <- unit states
+
+        # These parameters are initialized upon calling initialize_input_weights()
+        # and initialize_reservoir_weights().
+        self.spectral_scale = None
+        self.W_res_init_strategy = None
+        self.input_weights_scale = None
+        self.W_in_init_strategy = None
+
+        # helpful information to track
+        self.training_signals = [] # <- reservoir states over time during training
+        self.ins_init = False; self.res_init = False
+
+    def info(self):
+        out = u'Reservoir(N=%d, K=%d, \u03B5=%.2f)\n' % (self.N, self.K, self.echo_param)
+        out += 'W_res - spec_scale: %.2f, %s init\n' % (self.spectral_scale, self.W_res_init_strategy)
+        out += 'W_in  -      scale: %.2f, %s init' % (self.input_weights_scale, self.W_in_init_strategy)
+
+    def initialize_input_weights(self, strategy='binary', scale=1e-2, offset=0.5):
+        self.input_weights_scale = scale
+        self.W_in_init_strategy = strategy
+        if strategy == 'binary':
+            self.W_in = (np.random.rand(self.N, self.K) > 0.5).astype(int) - 0.5
+        elif strategy == 'uniform':
+            self.W_in = np.random.rand(self.N, self.K) - 0.5
+        elif strategy == 'gaussian':
+            self.W_in = np.random.randn(self.N, self.K) - 0.5
+        else:
+            raise ValueError('unknown input weight init strategy %s' % strategy)
+
+        self.W_in *= self.input_weights_scale
+        self.ins_init = True
+
+    def initialize_reservoir_weights(self, strategy='uniform', spectral_scale=1.0, offset=0.5):
+        self.spectral_scale = spectral_scale
+        self.W_res_init_strategy = strategy
+        if strategy == 'binary':
+            self.W_res = (np.random.rand(self.N, self.N) + 0.5).astype(int)
+        elif strategy == 'uniform':
+            self.W_res = np.random.rand(self.N, self.N)
+        elif strategy == 'gaussian':
+            self.W_res = np.random.randn(self.N, self.N)
+        else:
+            raise ValueError('unknown res. weight init strategy %s' % strategy)
+
+        self.W_res -= offset
+        self.W_res /= max(abs(la.eig(self.W_res)[0]))
+        self.W_res *= self.spectral_scale
+        self.res_init = True
+
+    def forward(self, u_n):
+        """
+        Forward propagate input signal u(n) (at time n) through reservoir.
+
+        u_n: K-dimensional input vector
+        """
+        u_n = u_n.squeeze()
+        assert (self.K == 1 and u_n.shape == ()) or u_n.shape[0] == self.W_in.shape[1], \
+            "u(n): %s.  W_res: %s (ID=%d)" % (u_n.shape, self.W_res.shape, self.idx)
+        assert self.ins_init, "Res. input weights not yet initialized (ID=%d)." % self.idx
+        assert self.res_init, "Res. recurrent weights not yet initialized (ID=%d)." % self.idx
+
+        in_to_res = np.dot(self.W_in, u_n).squeeze()
+        res_to_res = np.dot(self.W_res, self.state).squeeze()
+
+        # Equation (1) in "Formalism and Theory" of Scholarpedia page
+        self.state = (1. - self.echo_param) * self.state + self.echo_param * self.activation(in_to_res + res_to_res)
+
+        return self.state.squeeze(), in_to_res, res_to_res
+
+class ESN(object):
+
+    def __init__(self, input_size, output_size, reservoir_size, echo_param=0.6,
+                 output_activation=None, init_echo_timesteps=100, regulariser=1e-8,
+                 debug=False):
+        # IMPLEMENTATION STUFF ===================================================
+        if input_size != output_size:
+            raise NotImplementedError('num input dims must equal num output dims.')
+        if output_activation is not None:
+            raise NotImplementedError('non-identity output activations not implemented.')
+        # ========================================================================
+        self.reservoir = Reservoir(input_size, reservoir_size, echo_param, debug)
+        self.K = input_size
+        self.N = reservoir_size
+        self.L = output_size
+        if output_activation is None:
+            def iden(x): return x
+            output_activation = iden    # <- identity
+        self.init_echo_timesteps = init_echo_timesteps
+        self.regulariser = regulariser
+        self.output_activation = output_activation
+        self.debug = debug
+
+        self.W_out = np.ones((self.L, self.K+self.N))   # output weights
+
+
+    def initialize_input_weights(self, strategy='binary', scale=1e-2):
+        self.reservoir.initialize_input_weights(strategy, scale)
+
+    def initialize_reservoir_weights(self, strategy='uniform', spectral_scale=1.0, offset=0.5):
+        self.reservoir.initialize_reservoir_weights(strategy, spectral_scale, offset)
+
+    def forward(self, u_n, debug=False):
+        u_n = u_n.squeeze()
+        assert (self.K == 1 and u_n.shape == ()) or len(u_n) == self.K
+
+        x_n = self.reservoir.forward(u_n)  # reservoir states at time n
+        if debug: print('NEW x(n) shape: ' + str(x_n.shape))
+        z_n = np.append(x_n, u_n)          # extended system states at time n
+        if debug: print('NEW z(n) shape: ' + str(z_n.shape))
+
+        # by default, output activation is identity
+        output = self.output_activation(np.dot(self.W_out, z_n))
+        if debug: print('NEW output shape: ' + str(output.shape))
+        return output.squeeze()
+
+    def train(self, X, y):
+        assert X.shape[1] == self.K, "training data has unexpected dimensionality (%s); K = %d" % (X.shape, self.K)
+        X = X.reshape(-1, self.K)
+        y = y.reshape(-1, self.L)
+
+        # First, run a few inputs into the reservoir to get it echoing
+        initial_data = X[:self.init_echo_timesteps]
+        for u_n in initial_data:
+            _ = self.reservoir.forward(u_n)
+
+        if self.debug: print('-'*10+'Initial echo timesteps done. '+'-'*10)
+
+        # Now train the output weights
+        X_train = X[self.init_echo_timesteps:]
+        D = y[self.init_echo_timesteps:]                  # <- teacher output collection matrix
+        S = np.zeros((X_train.shape[0], self.N + self.K)) # <- state collection matrix
+        for n, u_n in enumerate(X_train):
+            x_n = self.reservoir.forward(u_n)
+            z_n = np.append(x_n, u_n)
+            S[n, :] = z_n
+        if self.debug: print('-'*10+'Extended system states collected.'+'-'*10)
+
+        # Solve (W_out)(S.T) = (D) by least squares
+        print('NEW' + '='*20)
+        T1 = np.dot(D.T, S)                                                       # L     x (N+K)
+        T2 = la.inv(np.dot(S.T, S)) + self.regulariser * np.eye(self.K + self.N)  # (N+K) x (N+K)
+        self.W_out = np.dot(T1, T2)                                               # L     x (N+K)
+        return S, D
+
+class ESN2(object):
+    """
+    Echo state network  -------------OLD ONE-----------------.
     
     N = reservoir_size; K = input_size; L = output_size
     Dimensions, notation guide:
@@ -41,11 +205,11 @@ class ESN(object):
     """
 
     def __init__(self, input_size, output_size, reservoir_size=100, echo_param=0.6, 
-                spectral_scale=1.0, init_echo_timesteps=100,
-                regulariser=1e-8, input_weights_scale=(1/100.),
-                debug_mode=False):
+                 spectral_scale=1.0, init_echo_timesteps=100,
+                 regulariser=1e-8, input_weights_scale=(1/100.),
+                 debug_mode=False):
 
-        #np.random.seed(42)
+        # np.random.seed(42)
         # ARCHITECTURE PARAMS
         self.input_size = input_size
         self.reservoir_size = reservoir_size
@@ -85,7 +249,7 @@ class ESN(object):
 
 
     def copy(self):
-        return ESN(self.input_size, self.output_size, self.reservoir_size, self.echo_param, 
+        return ESN2(self.input_size, self.output_size, self.reservoir_size, self.echo_param,
                     self.spectral_scale, self.init_echo_timesteps,
                     self.regulariser, self.input_weights_scale, self.debug)
 
@@ -136,9 +300,9 @@ class ESN(object):
         self.reservoir_state = (1.0 - self.echo_param)*self.reservoir_state + self.echo_param*self.activation_function(in_to_res + res_to_res)
         
         #res_to_out = np.dot(self.reservoir_state, self.W_out)
-        return self.reservoir_state.squeeze()
+        return self.reservoir_state.squeeze(), in_to_res, res_to_res
 
-    def forward_to_out(self, x_in):
+    def forward_to_out(self, x_in, debug=False):
         """
         x_in = u(n).
         Puts input signal u(n) into reservoir; gets updated reservoir states x(n).
@@ -149,12 +313,15 @@ class ESN(object):
 
         # print(np.shape(x_in))
         res_out = np.array(self.__forward_to_res__(np.array([x_in])))
+        if debug: print('OLD x(n) shape: ' + str(res_out.shape))
         res_out = np.hstack((res_out, x_in)) # augment the data with the reservoir data
+        if debug: print('OLD z(n) shape: ' + str(res_out.shape))
         # print(np.shape(res_out))
         assert np.shape(res_out)[0] == np.shape(self.W_out)[0], "res output is {}, whereas expected weights are {}".format(np.shape(res_out), np.shape(self.W_out))
 
         # z(n): (N+K); W_out.T: ((N+K)xL); y(n) = z(n) W_out.T
         res_to_out = np.dot(res_out, self.W_out)
+        if debug: print('OLD output shape: ' + str(res_to_out.shape) )
 
         return res_to_out
 
@@ -206,6 +373,8 @@ class ESN(object):
         # y_reg = np.vstack((y_target, np.zeros((self.reservoir_size+self.input_size, 1))))
 
         # lsq_result = np.linalg.lstsq(X_reg, y_reg)
+        T1 = np.dot(y_target.T, X_train)
+        T2 = la.inv(np.dot(X_train.T, X_train) + self.regulariser*np.eye(self.input_size + self.reservoir_size))
         lsq_result = np.dot(np.dot(y_target.T, X_train), np.linalg.inv(np.dot(X_train.T,X_train) + \
                         self.regulariser*np.eye(self.input_size+self.reservoir_size)))
         self.W_out = lsq_result[0]
@@ -215,6 +384,8 @@ class ESN(object):
 
         if self.debug: print("-"*10+"LINEAR REGRESSION ON OUTPUT DONE."+"-"*10)
         if self.debug: print("ESN trained!")
+
+        return X_train, y_target
 
     def predict(self, data, reset_res=False):
         # We do not need to 'initialise' the ESN because the training phase already did this

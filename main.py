@@ -1,4 +1,4 @@
-from ESN.ESN import ESN
+from ESN.ESN import ESN2 as ESN
 from MackeyGlass.MackeyGlassGenerator import run, onExit
 
 import numpy as np
