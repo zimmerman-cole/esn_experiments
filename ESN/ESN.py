@@ -229,13 +229,8 @@ class LayeredESN(object):
             echo_params = [echo_params]*num_reservoirs
 
         self.debug = debug
-        # self.reservoirs.append(Reservoir(input_size, reservoir_sizes[0], echo_params[0],
-        #                                  idx=0, debug=debug))
-        # for i, (size, echo_prm) in enumerate(zip(reservoir_sizes, echo_params)[1:]):
-        #     self.reservoirs.append(Reservoir(
-        #         input_size=self.reservoirs[-1].N, num_units=size, echo_param=echo_prm,
-        #         idx=i+1, debug=debug
-        #     ))
+
+        # initialize reservoirs
         self.__reservoir_input_size_rule__(reservoir_sizes, echo_params)
 
         self.regulariser = regulariser
@@ -268,15 +263,18 @@ class LayeredESN(object):
         for i, (strat, scale) in enumerate(zip(strategies, spectral_scales)):
             self.reservoirs[i].initialize_reservoir_weights(strat, scale)
 
-    def __forward_routing_rule__(self, inputs):
-        ''' 
+    def __forward_routing_rule__(self, u_n):
+        """
         Abstract function describing how the inputs are passed from layer to layer.
-        Just returning the inputs will result in no forward rule. 
-        The next-reservoir parameter allows you to pass in an reservoir and utilise its function to update the input.
-        '''
-        pass
+        It should take the input signal as input, and return an array containing
+          the concatenated states of all reservoirs.
 
-    def __reservoir_input_size_rule__(self):
+        This base version returns an empty array, which will cause the network to
+          do linear regression on the input signal only.
+        """
+        return np.array(0)
+
+    def __reservoir_input_size_rule__(self, *args):
         pass
 
     def forward(self, u_n, calculate_output=True):
@@ -317,6 +315,7 @@ class LayeredESN(object):
         T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye(self.K + self.N))
         self.W_out = np.dot(T1, T2)
 
+
 class LCESN(LayeredESN):
     def __init__(self, input_size, output_size, num_reservoirs, reservoir_sizes=None,
                  echo_params=0.6, output_activation=None, init_echo_timesteps=100,
@@ -325,6 +324,10 @@ class LCESN(LayeredESN):
                                     output_activation, init_echo_timesteps, regulariser, debug)
     
     def __reservoir_input_size_rule__(self, reservoir_sizes, echo_params):
+        """
+        Set up the reservoirs so that the first takes the input signal as input,
+          and the rest take the previous reservoir's state as input.
+        """
         self.reservoirs.append(Reservoir(self.K, reservoir_sizes[0], echo_params[0],
                                          idx=0, debug=self.debug))
         for i, (size, echo_prm) in enumerate(zip(reservoir_sizes, echo_params)[1:]):
@@ -333,13 +336,14 @@ class LCESN(LayeredESN):
                 idx=i+1, debug=self.debug
             ))
 
-    def __forward_routing_rule__(self, inputs):
+    def __forward_routing_rule__(self, u_n):
         x_n = np.zeros(0)
         for reservoir in self.reservoirs:
-            inputs = reservoir.forward(inputs)
-            x_n = np.append(x_n, inputs)
+            u_n = reservoir.forward(u_n)
+            x_n = np.append(x_n, u_n)
 
         return x_n
+
 
 class EESN(LayeredESN):
 
@@ -350,17 +354,19 @@ class EESN(LayeredESN):
                                     output_activation, init_echo_timesteps, regulariser, debug)
 
     def __reservoir_input_size_rule__(self, reservoir_sizes, echo_params):
+        """
+        Set up the reservoirs so that they all take the input signal as input.
+        """
         for i, (size, echo_prm) in enumerate(zip(reservoir_sizes, echo_params)):
             self.reservoirs.append(Reservoir(
                 input_size=self.K, num_units=size, echo_param=echo_prm,
                 idx=i+1, debug=self.debug
             ))
 
-
-    def __forward_routing_rule__(self, inputs):
+    def __forward_routing_rule__(self, u_n):
         x_n = np.zeros(0)
         for reservoir in self.reservoirs:
-            output = reservoir.forward(inputs)
+            output = reservoir.forward(u_n)
             x_n = np.append(x_n, output)
 
         return x_n
