@@ -22,6 +22,7 @@ Notes (from scholarpedia):
         (1) todo
 """
 
+
 class Reservoir(object):
     """
     input_size (K): input signal is K dimensions.
@@ -49,7 +50,9 @@ class Reservoir(object):
         self.W_in_init_strategy = None
 
         # helpful information to track
-        self.training_signals = [] # <- reservoir states over time during training
+        if self.debug:
+            self.signals = [] # <- reservoir states over time during training
+            self.num_to_store = 10
         self.ins_init = False; self.res_init = False
 
     def info(self):
@@ -103,11 +106,11 @@ class Reservoir(object):
 
         in_to_res = np.dot(self.W_in, u_n).squeeze()
         res_to_res = np.dot(self.state.reshape(1, -1), self.W_res)
-        #res_to_res = np.dot(self.W_res, self.state.reshape(-1, 1)).squeeze()
 
-        old_state = self.state
         # Equation (1) in "Formalism and Theory" of Scholarpedia page
         self.state = (1. - self.echo_param) * self.state + self.echo_param * self.activation(in_to_res + res_to_res)
+        if self.debug:
+            self.signals.append(self.state[:self.num_to_store].tolist())
 
         return self.state.squeeze()
 
@@ -183,12 +186,14 @@ class ESN(object):
         T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye(self.K + self.N))  # (N+K) x (N+K)
         self.W_out = np.dot(T1, T2)                                               # L     x (N+K)
 
+
 class LayeredESN(object):
     """
     (ABSTRACT CLASS)
     Layered echo state network (LESN).
 
-    |       Argument      |       dtype        |  Description
+    --------------------------------------------------------------------------------
+    |       Argument      |       dtype        |  Description                      |
     -------------------------------------------------------------------------------|
     |         input_size  |  int               | Dimensionality of input signal.   |
     |         output_size |  int               | Dimensionality of output signal.  |
@@ -223,9 +228,9 @@ class LayeredESN(object):
 
         if reservoir_sizes is None:
             reservoir_sizes = [int(np.ceil(1000. / num_reservoirs))]*num_reservoirs
-        elif type(reservoir_sizes) is not list:
+        elif type(reservoir_sizes) not in [list, np.ndarray]:
             reservoir_sizes = [reservoir_sizes]*num_reservoirs
-        if type(echo_params) is not list:
+        if type(echo_params) not in [list, np.ndarray]:
             echo_params = [echo_params]*num_reservoirs
 
         self.debug = debug
@@ -242,7 +247,6 @@ class LayeredESN(object):
         self.output_activation = output_activation
 
         self.N = sum(reservoir_sizes)
-
         self.W_out = np.ones((self.L, self.K+self.N))
 
     def initialize_input_weights(self, strategies='binary', scales=1e-2):
@@ -281,8 +285,7 @@ class LayeredESN(object):
         u_n = u_n.squeeze()
         assert (self.K == 1 and u_n.shape == ()) or len(u_n) == self.K
 
-        inputs = u_n
-        x_n = self.__forward_routing_rule__(inputs)
+        x_n = self.__forward_routing_rule__(u_n)
 
         if calculate_output:
             z_n = np.append(x_n, u_n)
@@ -292,7 +295,7 @@ class LayeredESN(object):
             return x_n
 
     def train(self, X, y):
-        assert X.shape[1] == self.K, "training data has unexpected dimensionality (%s); K = %d" % (X.shape, self.K)
+        assert X.shape[1] == self.K, "Training data has unexpected dimensionality (%s). K = %d." % (X.shape, self.K)
         X = X.reshape(-1, self.K)
         y = y.reshape(-1, self.L)
 
@@ -360,7 +363,7 @@ class EESN(LayeredESN):
         for i, (size, echo_prm) in enumerate(zip(reservoir_sizes, echo_params)):
             self.reservoirs.append(Reservoir(
                 input_size=self.K, num_units=size, echo_param=echo_prm,
-                idx=i+1, debug=self.debug
+                idx=i, debug=self.debug
             ))
 
     def __forward_routing_rule__(self, u_n):
