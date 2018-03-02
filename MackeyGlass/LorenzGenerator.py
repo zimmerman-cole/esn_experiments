@@ -51,32 +51,28 @@ def runLorenz(num_data_samples=5000):
 
     #     sample_timer += 1
 
-        #------ better version on wikipedia which just solves the ODE----
-        import numpy as np
-        import matplotlib.pyplot as plt
-        from scipy.integrate import odeint
-        from mpl_toolkits.mplot3d import Axes3D
+    #------ better version on wikipedia which just solves the ODE----
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from scipy.integrate import odeint
+    from mpl_toolkits.mplot3d import Axes3D
 
-        rho = 28.0
-        sigma = 10.0
-        beta = 8.0 / 3.0
+    rho = 28.0
+    sigma = 10.0
+    beta = 8.0 / 3.0
 
-        def f(state, t):
-            x, y, z = state  # unpack the state vector
-            return sigma * (y - x), x * (rho - z) - y, x * y - beta * z  # derivatives
+    def f(state, t):
+        x, y, z = state  # unpack the state vector
+        return sigma * (y - x), x * (rho - z) - y, x * y - beta * z  # derivatives
 
-        delta_t = 0.01
-        t_end = num_data_samples * delta_t
-        state0 = [1.0, 1.0, 1.0]
-        t = np.arange(0.0, t_end, delta_t)
+    delta_t = 0.01
+    t_end = num_data_samples * delta_t
+    state0 = [1.0, 1.0, 1.0]
+    t = np.arange(0.0, t_end, delta_t)
 
-        states = odeint(f, state0, t)
+    states = odeint(f, state0, t)
 
-        return states
-        # fig = plt.figure()
-        # ax = fig.gca(projection='3d')
-        # ax.plot(states[:,0], states[:,1], states[:,2])
-        # plt.show()
+    return states
 
 def onExit(data, axis1=0, axis2=2):
     # save the data
