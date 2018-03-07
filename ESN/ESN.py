@@ -2,6 +2,7 @@ import numpy as np
 import numpy.linalg as la
 import pickle as pkl
 import time
+from abc import abstractmethod
 import matplotlib.pyplot as plt
 
 """
@@ -40,7 +41,7 @@ class Reservoir(object):
         # input-to-reservoir, reservoir-to-reservoir weights (not yet initialized)
         self.W_in = np.zeros((self.N, self.K))
         self.W_res = np.zeros((self.N, self.N))
-        self.state = np.zeros(self.N)             # <- unit states
+        self.state = np.zeros(self.N)            # <- unit states
 
         # These parameters are initialized upon calling initialize_input_weights()
         # and initialize_reservoir_weights().
@@ -64,7 +65,7 @@ class Reservoir(object):
         self.input_weights_scale = scale
         self.W_in_init_strategy = strategy
         if strategy == 'binary':
-            self.W_in = (np.random.rand(self.N, self.K) > 0.5).astype(int)
+            self.W_in = (np.random.rand(self.N, self.K) > 0.5).astype(float)
         elif strategy == 'uniform':
             self.W_in = np.random.rand(self.N, self.K)
         elif strategy == 'gaussian':
@@ -80,7 +81,7 @@ class Reservoir(object):
         self.spectral_scale = spectral_scale
         self.W_res_init_strategy = strategy
         if strategy == 'binary':
-            self.W_res = (np.random.rand(self.N, self.N) + 0.5).astype(int)
+            self.W_res = (np.random.rand(self.N, self.N) > 0.5).astype(float)
         elif strategy == 'uniform':
             self.W_res = np.random.rand(self.N, self.N)
         elif strategy == 'gaussian':
@@ -186,6 +187,9 @@ class ESN(object):
         T1 = np.dot(D.T, S)                                                       # L     x (N+K)
         T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye(self.K + self.N))  # (N+K) x (N+K)
         self.W_out = np.dot(T1, T2)                                               # L     x (N+K)
+        
+    def reset_reservoir_states(self):
+        self.reservoir.state = np.zeros(self.N)
 
 
 class LayeredESN(object):
@@ -268,6 +272,7 @@ class LayeredESN(object):
         for i, (strat, scale) in enumerate(zip(strategies, spectral_scales)):
             self.reservoirs[i].initialize_reservoir_weights(strat, scale)
 
+    @abstractmethod
     def __forward_routing_rule__(self, u_n):
         """
         Abstract function describing how the inputs are passed from layer to layer.
@@ -279,6 +284,7 @@ class LayeredESN(object):
         """
         return np.array(0)
 
+    @abstractmethod
     def __reservoir_input_size_rule__(self, *args):
         pass
 
@@ -318,14 +324,13 @@ class LayeredESN(object):
         T1 = np.dot(D.T, S)
         T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye(self.K + self.N))
         self.W_out = np.dot(T1, T2)
+        
+    @abstractmethod
+    def reset_reservoir_states(self):
+        raise NotImplementedError()
 
 
 class LCESN(LayeredESN):
-    def __init__(self, input_size, output_size, num_reservoirs, reservoir_sizes=None,
-                 echo_params=0.6, output_activation=None, init_echo_timesteps=100,
-                 regulariser=1e-8, debug=False):
-        super(LCESN, self).__init__(input_size, output_size, num_reservoirs, reservoir_sizes, echo_params,
-                                    output_activation, init_echo_timesteps, regulariser, debug)
     
     def __reservoir_input_size_rule__(self, reservoir_sizes, echo_params):
         """
@@ -347,15 +352,13 @@ class LCESN(LayeredESN):
             x_n = np.append(x_n, u_n)
 
         return x_n
+    
+    def reset_reservoir_states(self):
+        for reservoir in self.reservoirs:
+            reservoir.state = np.zeros(reservoir.N)
 
 
 class EESN(LayeredESN):
-
-    def __init__(self, input_size, output_size, num_reservoirs, reservoir_sizes=None,
-                 echo_params=0.6, output_activation=None, init_echo_timesteps=100,
-                 regulariser=1e-8, debug=False):
-        super(EESN, self).__init__(input_size, output_size, num_reservoirs, reservoir_sizes, echo_params,
-                                    output_activation, init_echo_timesteps, regulariser, debug)
 
     def __reservoir_input_size_rule__(self, reservoir_sizes, echo_params):
         """
@@ -374,6 +377,10 @@ class EESN(LayeredESN):
             x_n = np.append(x_n, output)
 
         return x_n
+    
+    def reset_reservoir_states(self):
+        for reservoir in self.reservoirs:
+            reservoir.state = np.zeros(reservoir.N)
 
 
 class ESN2(object):
