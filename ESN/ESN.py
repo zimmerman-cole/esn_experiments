@@ -64,14 +64,15 @@ class Reservoir(object):
         self.input_weights_scale = scale
         self.W_in_init_strategy = strategy
         if strategy == 'binary':
-            self.W_in = (np.random.rand(self.N, self.K) > 0.5).astype(int) - 0.5
+            self.W_in = (np.random.rand(self.N, self.K) > 0.5).astype(int)
         elif strategy == 'uniform':
-            self.W_in = np.random.rand(self.N, self.K) - 0.5
+            self.W_in = np.random.rand(self.N, self.K)
         elif strategy == 'gaussian':
-            self.W_in = np.random.randn(self.N, self.K) - 0.5
+            self.W_in = np.random.randn(self.N, self.K)
         else:
             raise ValueError('unknown input weight init strategy %s' % strategy)
 
+        self.W_in -= offset
         self.W_in *= self.input_weights_scale
         self.ins_init = True
 
