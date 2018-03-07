@@ -13,8 +13,8 @@ if __name__ == '__main__':
     split = 20100
     X_train = data[:split-1]
     y_train = data[1:split]
-    X_valid = data[split:-1]
-    y_valid = data[split+1:]
+    X_valid = data[split-1:-1]
+    y_valid = data[split:]
 
     esn = ESN(1, 1, 1000, echo_param=0.85, regulariser=1e-6)
     esn.initialize_input_weights(scale=1.0)
