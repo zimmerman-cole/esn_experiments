@@ -254,23 +254,27 @@ class LayeredESN(object):
         self.N = sum(reservoir_sizes)
         self.W_out = np.ones((self.L, self.K+self.N))
 
-    def initialize_input_weights(self, strategies='binary', scales=1e-2):
-        if type(strategies) is not list:
+    def initialize_input_weights(self, strategies='binary', scales=1e-2, offsets=0.5):
+        if type(strategies) not in [list, np.ndarray]:
             strategies = [strategies]*self.num_reservoirs
-        if type(scales) is not list:
+        if type(scales) not in [list, np.ndarray]:
             scales = [scales]*self.num_reservoirs
+        if type(offsets) not in [list, np.ndarray]:
+            offsets = [offsets]*self.num_reservoirs
 
-        for i, (strat, scale) in enumerate(zip(strategies, scales)):
-            self.reservoirs[i].initialize_input_weights(strat, scale)
+        for i, (strat, scale, offset) in enumerate(zip(strategies, scales, offsets)):
+            self.reservoirs[i].initialize_input_weights(strat, scale, offset)
 
-    def initialize_reservoir_weights(self, strategies='uniform', spectral_scales=1.0):
-        if type(strategies) is not list:
+    def initialize_reservoir_weights(self, strategies='uniform', spectral_scales=1.0, offsets=0.5):
+        if type(strategies) not in [list, np.ndarray]:
             strategies = [strategies]*self.num_reservoirs
-        if type(spectral_scales) is not list:
+        if type(spectral_scales) not in [list, np.ndarray]:
             spectral_scales = [spectral_scales]*self.num_reservoirs
+        if type(offsets) not in [list, np.ndarray]:
+            offsets = [offsets]*self.num_reservoirs
 
-        for i, (strat, scale) in enumerate(zip(strategies, spectral_scales)):
-            self.reservoirs[i].initialize_reservoir_weights(strat, scale)
+        for i, (strat, scale, offset) in enumerate(zip(strategies, spectral_scales, offsets)):
+            self.reservoirs[i].initialize_reservoir_weights(strat, scale, offset)
 
     @abstractmethod
     def __forward_routing_rule__(self, u_n):
