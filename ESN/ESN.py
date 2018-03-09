@@ -4,6 +4,7 @@ import pickle as pkl
 import time
 from abc import abstractmethod
 import matplotlib.pyplot as plt
+from sklearn.decomposition import PCA
 
 """
 Notes (from scholarpedia):
@@ -293,6 +294,11 @@ class LayeredESN(object):
         pass
 
     def forward(self, u_n, calculate_output=True):
+        """
+        Forward-propagate signal through network.
+        If calculate_output = True: returns output signal, y_n.
+                              else: returns updated system states, x_n.
+        """
         u_n = u_n.squeeze()
         assert (self.K == 1 and u_n.shape == ()) or len(u_n) == self.K
 
@@ -329,9 +335,100 @@ class LayeredESN(object):
         T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye(self.K + self.N))
         self.W_out = np.dot(T1, T2)
         
-    @abstractmethod
     def reset_reservoir_states(self):
-        raise NotImplementedError()
+        for reservoir in self.reservoirs:
+            reservoir.state *= 0.
+
+
+class DHESN(LayeredESN):
+
+    def __init__(self, *args, **kwargs):
+        super(DHESN, self).__init__(*args, **kwargs)
+        if 'encoder_type' not in kwargs.keys():
+            kwargs['encoder_type'] = 'PCA'
+
+        self.encoder_type = kwargs['encoder_type']
+        self.encoders = []
+
+        if self.encoder_type == 'PCA':
+            for j in range(1, self.num_reservoirs):
+                self.encoders.append(PCA(n_components=self.reservoirs[j-1].N))
+        else:
+            raise NotImplementedError('non-PCA encodings not done yet')
+
+    def __reservoir_input_size_rule__(self, reservoir_sizes, echo_params):
+        self.reservoirs.append(Reservoir(self.K, reservoir_sizes[0], echo_params[0],
+                                         idx=0, debug=self.debug))
+        for i, (size, echo_prm) in enumerate(zip(reservoir_sizes, echo_params[1:])):
+            self.reservoirs.append(Reservoir(
+                input_size=self.reservoirs[i-1].N, num_units=size, echo_param=echo_prm,
+                idx=i+1, debug=self.debug
+            ))
+
+    def __forward_routing_rule__(self, u_n):
+        x_n = np.zeros(0)
+
+        for reservoir, encoder in zip(self.reservoirs, self.encoders):
+            u_n = reservoir.forward(u_n)
+            u_n = encoder.transform(u_n.reshape(1, -1)).squeeze()
+            x_n = np.append(x_n, u_n)
+
+        u_n = self.reservoirs[-1].forward(u_n)
+        x_n = np.append(x_n, u_n)
+
+        return x_n
+
+    def train(self, X, y):
+        """ (needs different train() because reservoirs+encoders have to be warmed up+trained one at a time."""
+        assert X.shape[1] == self.K, "Training data has unexpected dimensionality (%s). K = %d." % (X.shape, self.K)
+        X = X.reshape(-1, self.K)
+        y = y.reshape(-1, self.L)
+        assert self.encoder_type != 'PCA' or np.mean(X) < 1e-3, "Input data must be zero-mean to use PCA encoding."
+
+        T = len(X) - self.init_echo_timesteps
+        S = np.zeros((T, self.N+self.K))
+        # S: collection of extended system states (encoder outputs plus inputs)
+        #     at each time-step t
+        S[:, -self.K:] = X[self.init_echo_timesteps:]
+        delim = np.array([0]+[r.N for r in self.reservoirs])
+        for i in range(1, len(delim)):
+            delim[i] += delim[i-1]
+
+        inputs = X[self.init_echo_timesteps:, :]
+        # Now send data into each reservoir one at a time,
+        #   and train each encoder one at a time
+        for i in range(self.num_reservoirs):
+            reservoir = self.reservoirs[i]
+
+            # burn-in period (init echo timesteps) ===============================================
+            for u_n in inputs:
+                _ = reservoir.forward(u_n)
+            # ==================
+
+            N_i = reservoir.N
+            S_i = np.zeros((T, N_i))  # reservoir i's states over T timesteps
+
+            # Now collect the real state data for encoders to train on
+            for n, u_n in enumerate(inputs):
+                S_i[n, :] = reservoir.forward(u_n)
+
+            # All reservoirs except the last output into an autoencoder
+            if i != self.num_reservoirs - 1:
+                encoder = self.encoders[i]
+                # Now train the encoder using the gathered state data
+                encoder.fit(S_i)
+                S_i = encoder.transform(S_i)
+
+            lb, ub = delim[i], delim[i+1]
+            S[:, lb:ub] = S_i
+
+            inputs = S_i
+
+        D = y[self.init_echo_timesteps:]
+        # Solve linear system
+        T1 = np.dot(D.T, S)
+        T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye(self.K + self.N))
+        self.W_out = np.dot(T1, T2)
 
 
 class LCESN(LayeredESN):
@@ -345,7 +442,7 @@ class LCESN(LayeredESN):
                                          idx=0, debug=self.debug))
         for i, (size, echo_prm) in enumerate(zip(reservoir_sizes, echo_params)[1:]):
             self.reservoirs.append(Reservoir(
-                input_size=self.reservoirs[-1].N, num_units=size, echo_param=echo_prm,
+                input_size=self.reservoirs[i-1].N, num_units=size, echo_param=echo_prm,
                 idx=i+1, debug=self.debug
             ))
 
@@ -356,10 +453,6 @@ class LCESN(LayeredESN):
             x_n = np.append(x_n, u_n)
 
         return x_n
-    
-    def reset_reservoir_states(self):
-        for reservoir in self.reservoirs:
-            reservoir.state = np.zeros(reservoir.N)
 
 
 class EESN(LayeredESN):
@@ -381,10 +474,6 @@ class EESN(LayeredESN):
             x_n = np.append(x_n, output)
 
         return x_n
-    
-    def reset_reservoir_states(self):
-        for reservoir in self.reservoirs:
-            reservoir.state = np.zeros(reservoir.N)
 
 
 class ESN2(object):
