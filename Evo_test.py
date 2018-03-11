@@ -32,7 +32,7 @@ if __name__ == '__main__':
     population = 20
     std = 0.01
     learn_rate = 0.001
-    base_esn = EESN(input_size=1, output_size=1, num_reservoirs=5, reservoir_sizes=300, regulariser=1e-4)
+    base_esn = LCESN(input_size=1, output_size=1, num_reservoirs=5, reservoir_sizes=300, regulariser=1e-4)
     # base_esn = ESN(input_size=1, output_size=1, reservoir_size=300, regulariser=1e-6)
     base_esn.initialize_input_weights(scales=1.0)
     base_esn.initialize_reservoir_weights(spectral_scales=1.25)

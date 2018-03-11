@@ -238,7 +238,7 @@ class Agent(object):
         elif isinstance(self.base_esn, LCESN):
             echo_params = params[:self.base_esn.num_reservoirs]
             spec_params = params[self.base_esn.num_reservoirs:self.base_esn.num_reservoirs*2]
-            weightin_params = params[self.base_esn.num_reservoirs*2:-1]
+            weightin_params = params[self.base_esn.num_reservoirs*2:]
             esn = LCESN(input_size=self.base_esn.getInputSize(), output_size=self.base_esn.getOutputSize(), num_reservoirs=self.base_esn.num_reservoirs,
                         reservoir_sizes=self.base_esn.reservoir_sizes, echo_params=echo_params, #self.base_esn.output_activation,
                         init_echo_timesteps=self.base_esn.init_echo_timesteps, regulariser=self.base_esn.regulariser, debug=self.base_esn.debug)
