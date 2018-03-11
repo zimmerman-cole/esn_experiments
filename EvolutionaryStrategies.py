@@ -9,6 +9,186 @@ import time
 from ESN.ESN import LayeredESN, LCESN, EESN, ESN
 from Helper.utils import nrmse
 
+class GeneticAlgorithm(object):
+
+    def __init__(self, reward_function, num_params, params_base=None, num_resamples=1,
+                population=20, mutation_prob=0.05, selection_strategy='roulette', 
+                verbose=False, seed=None):
+        '''
+        reward_function:    objective function to MAXIMISE
+        num_params:         number of features in the model vector
+        population:         number of individuals to create per generation
+        base_run_rate:      number of episodes before we run the base parameters on the 
+                                objective function
+        '''
+
+        if seed is not None: np.random.seed(seed)
+
+        self.reward_function = reward_function
+        self.num_params = num_params
+
+        self.num_resamples = num_resamples
+        self.population = population * self.num_resamples
+        self.individuals = np.clip(np.random.rand(self.population, self.num_params), 0, 2)
+        self.individuals_fitness = np.zeros(self.population)
+
+        self.culm_mean_reward = None
+        self.culm_mean_reward_base = None
+        self.reward_hist_pop = []
+        self.reward_hist_base = []
+
+        self.mutation_prob = mutation_prob
+        self.selection_strategy = selection_strategy
+
+        self.verbose = verbose
+        self.base_run_rate = 1 
+        self.SAVE_RATE = 4
+
+        self.best_individual = np.zeros(self.num_params)
+
+    def sample_population(self):
+        new_generation = np.zeros((self.population, self.num_params))
+        # invert the fitnesses because then smaller values are BETTER
+        inv_fit = 1./self.individuals_fitness
+        fit_norm = inv_fit / np.sum(inv_fit)
+        pop_probs = np.cumsum(fit_norm)
+        if self.verbose:
+            print('roulette probs: {}'.format(pop_probs))
+        for k in range(0, self.population, self.num_resamples):
+            if self.selection_strategy == 'roulette':
+                # sample an individual using the roulette strategy
+                p1 = np.argwhere(pop_probs > np.random.rand())[0][0]
+                p2 = np.argwhere(pop_probs > np.random.rand())[0][0]
+                #cross-over
+                c = int(np.random.rand() * self.num_params)
+                p = np.zeros(self.num_params)
+                p[:c] = self.individuals[p1, :c]
+                p[c:] = self.individuals[p2, c:]
+                if self.verbose:
+                    print('crossover--> p1: {}, p2: {} = {}'.format(p1, p2, p))
+                # each gene/nucleotide has a small probability of mutating with some white noise
+                mutation = ((np.random.rand(self.num_params) < self.mutation_prob) > 0.5).astype(int) * np.random.randn(self.num_params)
+                p = np.clip(p + mutation, 0., 2.)
+                if self.verbose:
+                    print('mutation--> p: {}'.format(p))
+                new_generation[k:(k+self.num_resamples), :] = p
+
+        # completely replace the old generation
+        self.individuals = new_generation
+
+    def step(self):
+        # run the population through the reward function
+        mean_reward = 0.0
+        rewards = []
+        for k in range(np.shape(self.individuals)[0]):
+            # run the individual through the objective function
+            r = self.reward_function(self.individuals[k, :])
+
+            if self.verbose:
+                print("INDIVIDUAL {} --> reward: {} \n\t\t PARAMS: {}".format(k, r, self.individuals[k, :]))
+
+            self.individuals_fitness[k] = r
+            mean_reward += r
+
+        # mean reward of all the behaviours of the pop.
+        mean_reward /= self.population
+
+        # record cummulative mean reward
+        if self.culm_mean_reward == None:
+            self.culm_mean_reward = mean_reward
+        else:
+            self.culm_mean_reward = 0.9*self.culm_mean_reward + 0.1*mean_reward
+
+        self.reward_hist_pop.append(self.culm_mean_reward)
+
+        # get the new generation
+        self.sample_population()
+
+        return mean_reward
+
+    def play(self):
+        r,_ = self.reward_function(self.params_base)
+        print("reward received: {}".format(r))
+        return r
+
+    def train(self, steps, name):
+
+        # store the start time
+        start_time_sec = time.time()
+
+        # best base score so far (so we can save only the best model)
+        best_base = -100000
+
+        for i in range(steps):
+
+            mean_reward = self.step()
+
+            # run the environment on the base parameters
+            if i % self.base_run_rate == 0:
+                self.best_individual = self.individuals[np.argmax(self.individuals_fitness), :]
+                base_run = self.reward_function(self.best_individual)
+                # record cummulative mean reward of the base params
+                if self.culm_mean_reward_base == None:
+                    self.culm_mean_reward_base = base_run
+                else:
+                    self.culm_mean_reward_base = 0.9*self.culm_mean_reward_base + 0.1*base_run
+
+                self.reward_hist_base.append(self.culm_mean_reward_base)
+
+                print('episode {}, base reward: {}, pop. reward: {}, pop. reward ov. time: {}, base reward ov. time: {}'.format(
+                i, base_run, mean_reward, self.culm_mean_reward, self.culm_mean_reward_base))
+
+            # save the state every 20 epochs (or the last epochs)
+            if i % self.SAVE_RATE == 0 or i > steps - 2:
+                # save the MODEL
+                try:
+                    f = open(name+'_MODELpartial.pkl', 'wb')
+                    pkl.dump(self.best_individual, f)
+                    f.close()
+                    print("MODEL saved.")
+                except:
+                    print('FAILED TO SAVE PARTIAL MODEL.')
+
+                if self.culm_mean_reward_base >= best_base:
+                    try:
+                        f = open(name+'_MODEL_BESTpartial.pkl', 'wb')
+                        pkl.dump(self.best_individual, f)
+                        f.close()
+                        print("!!BEST MODEL saved.")
+                        best_base = self.culm_mean_reward_base
+                    except:
+                        print('FAILED TO SAVE BEST MODEL')
+
+                # save the cummulative reward DATA
+                try:
+                    f = open(name+'_DATApartial.pkl', 'wb')
+                    pkl.dump((self.reward_hist_pop, self.reward_hist_base), f)
+                    f.close()
+                    print("DATA saved.")
+                except:
+                    print('FAILED TO SAVE PARTIAL DATA.')
+
+                # save the STATS
+                try:
+                    total_time_sec = time.time() - start_time_sec
+                    total_time_min = float(total_time_sec) / 60.0
+                    stats = "Total run time mins: {}.".format(total_time_min)
+
+                    f = open(name+'_STATSpartial.pkl', 'wb')
+                    pkl.dump(stats, f)
+                    f.close()
+                    print("STATS saved.")
+                except:
+                    print("FAILED TO SAVE PARTIAL STATS.")
+
+            # look at the last 10 updates and if they are within a std of 3, we have converged
+            if len(self.reward_hist_pop) > -0.1 and self.reward_hist_pop[-1] > -0.1:
+                std_10 = np.std(self.reward_hist_pop[-10:])
+                if std_10 <= 0.3:
+                    print("ENDED DUE TO CONVERGENCE.")
+                    break
+
+
 class EvolutionaryStrategiesOptimiser(object):
 
     def __init__(self, reward_function, num_params, params_base=None,
@@ -290,9 +470,31 @@ def RunES(episodes, name, population, std, learn_rate,
     agent = Agent(data_train, data_val, MEAN_OF_DATA, base_esn)
     e_op = EvolutionaryStrategiesOptimiser(
         agent.run_episode, agent.num_params, agent.params_base,
-        population, std, learn_rate, verbose=True)
+        population, std, learn_rate, verbose=False, num_resamples=2)
 
     e_op.train(episodes, name)
+
+    try:
+        f = open(name+'_MODEL.pkl', 'wb')
+        pkl.dump((e_op.params_base, agent.num_params, agent.layers, agent.network_type), f)
+        f.close()
+    except:
+        print('FAILED TO SAVE MODEL:'+name)
+
+    return e_op.reward_hist_pop
+
+def RunGA(episodes, name, population, 
+            data_train, data_val, MEAN_OF_DATA, base_esn):
+    '''
+    Call this function to setup the 'agent' and the GA optimiser to then
+    do the optimisation.
+    '''
+    agent = Agent(data_train, data_val, MEAN_OF_DATA, base_esn)
+    ga_op = GeneticAlgorithm(
+        reward_function=agent.run_episode, num_params=agent.num_params,
+        population=population, verbose=True, num_resamples=1)
+
+    ga_op.train(episodes, name)
 
     try:
         f = open(name+'_MODEL.pkl', 'wb')
