@@ -27,7 +27,7 @@ class EvolutionaryStrategiesOptimiser(object):
                                 objective function
         '''
 
-        if seed is not None: np.random.seed(10)
+        if seed is not None: np.random.seed(seed)
 
         self.reward_function = reward_function
         self.num_params = num_params
@@ -209,7 +209,7 @@ class Agent(object):
         # parameters (excluded the regulariser because it would just go to a huge value,
         #   maybe you can find a way to fix this.): 
         # ([echo params], [spectral radii], [input_scale])
-        if isinstance(base_esn, ESN):
+        if isinstance(self.base_esn, ESN):
             self.num_params = 3
             self.params_base = np.ones((self.num_params), dtype=np.float)
 
@@ -219,7 +219,7 @@ class Agent(object):
             self.params_base = np.ones((self.num_params), dtype=np.float)
             # initial heuristic that spectral radius is 1 and echo param is 0.5 and weight in is 1
             self.params_base[:self.base_esn.num_reservoirs] = 0.5
-            self.params_base[self.base_esn.num_reservoirs*2:-1]=1.0
+            self.params_base[self.base_esn.num_reservoirs*2:]=1.0
 
     def params_to_model(self, params):
         '''
@@ -229,10 +229,10 @@ class Agent(object):
         if isinstance(self.base_esn, EESN):
             echo_params = params[:self.base_esn.num_reservoirs]
             spec_params = params[self.base_esn.num_reservoirs:self.base_esn.num_reservoirs*2]
-            weightin_params = params[self.base_esn.num_reservoirs*2:-1]
+            weightin_params = params[self.base_esn.num_reservoirs*2:]
             esn = EESN(input_size=self.base_esn.getInputSize(), output_size=self.base_esn.getOutputSize(), num_reservoirs=self.base_esn.num_reservoirs,
                         reservoir_sizes=self.base_esn.reservoir_sizes, echo_params=echo_params, #self.base_esn.output_activation,
-                        init_echo_timesteps=self.base_esn.init_echo_timesteps, regulariser=reg, debug=self.base_esn.debug)
+                        init_echo_timesteps=self.base_esn.init_echo_timesteps, regulariser=self.base_esn.regulariser, debug=self.base_esn.debug)
             esn.initialize_input_weights(scales=weightin_params.tolist())
             esn.initialize_reservoir_weights(spectral_scales=spec_params.tolist())
         elif isinstance(self.base_esn, LCESN):
@@ -241,7 +241,7 @@ class Agent(object):
             weightin_params = params[self.base_esn.num_reservoirs*2:-1]
             esn = LCESN(input_size=self.base_esn.getInputSize(), output_size=self.base_esn.getOutputSize(), num_reservoirs=self.base_esn.num_reservoirs,
                         reservoir_sizes=self.base_esn.reservoir_sizes, echo_params=echo_params, #self.base_esn.output_activation,
-                        init_echo_timesteps=self.base_esn.init_echo_timesteps, regulariser=reg, debug=self.base_esn.debug)
+                        init_echo_timesteps=self.base_esn.init_echo_timesteps, regulariser=self.base_esn.regulariser, debug=self.base_esn.debug)
             esn.initialize_input_weights(scales=weightin_params.tolist())
             esn.initialize_reservoir_weights(spectral_scales=spec_params.tolist())
         else: #ESN
@@ -250,7 +250,7 @@ class Agent(object):
             weightin_params = params[2]
             esn = ESN(input_size=self.base_esn.getInputSize(), output_size=self.base_esn.getOutputSize(),
                         reservoir_size=self.base_esn.N, echo_param=echo_params, #self.base_esn.output_activation,
-                        init_echo_timesteps=self.base_esn.init_echo_timesteps, regulariser=esn.regulariser, debug=self.base_esn.debug)
+                        init_echo_timesteps=self.base_esn.init_echo_timesteps, regulariser=self.base_esn.regulariser, debug=self.base_esn.debug)
             esn.initialize_input_weights(scale=weightin_params)
             esn.initialize_reservoir_weights(spectral_scale=spec_params)
 
@@ -290,7 +290,7 @@ def RunES(episodes, name, population, std, learn_rate,
     agent = Agent(data_train, data_val, MEAN_OF_DATA, base_esn)
     e_op = EvolutionaryStrategiesOptimiser(
         agent.run_episode, agent.num_params, agent.params_base,
-        population, std, learn_rate)
+        population, std, learn_rate, verbose=True)
 
     e_op.train(episodes, name)
 

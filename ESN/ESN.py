@@ -345,6 +345,10 @@ class LayeredESN(object):
         for reservoir in self.reservoirs:
             reservoir.state *= 0.
 
+    def getInputSize(self): return self.K
+
+    def getOutputSize(self): return self.L
+
 
 class DHESN(LayeredESN):
 
