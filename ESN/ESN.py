@@ -64,7 +64,7 @@ class Reservoir(object):
         self.input_weights_scale = scale
         self.W_in_init_strategy = strategy
         if strategy == 'binary':
-            self.W_in = (np.random.rand(self.N, self.K) > 0.5).astype(int)
+            self.W_in = (np.random.rand(self.N, self.K) > 0.5).astype(int).astype(float)
         elif strategy == 'uniform':
             self.W_in = np.random.rand(self.N, self.K)
         elif strategy == 'gaussian':
@@ -187,6 +187,9 @@ class ESN(object):
         T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye(self.K + self.N))  # (N+K) x (N+K)
         self.W_out = np.dot(T1, T2)                                               # L     x (N+K)
 
+    def getInputSize(self): return self.K
+
+    def getOutputSize(self): return self.L
 
 class LayeredESN(object):
     """
@@ -225,6 +228,7 @@ class LayeredESN(object):
         self.K = input_size
         self.L = output_size
         self.num_reservoirs = num_reservoirs
+        self.reservoir_sizes = reservoir_sizes
         self.reservoirs = []
 
         if reservoir_sizes is None:
@@ -257,7 +261,7 @@ class LayeredESN(object):
             scales = [scales]*self.num_reservoirs
 
         for i, (strat, scale) in enumerate(zip(strategies, scales)):
-            self.reservoirs[i].initialize_input_weights(strat, scale)
+            self.reservoirs[i].initialize_input_weights(strategy=strat, scale=scale)
 
     def initialize_reservoir_weights(self, strategies='uniform', spectral_scales=1.0):
         if type(strategies) is not list:
@@ -318,6 +322,10 @@ class LayeredESN(object):
         T1 = np.dot(D.T, S)
         T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye(self.K + self.N))
         self.W_out = np.dot(T1, T2)
+
+    def getInputSize(self): return self.K
+
+    def getOutputSize(self): return self.L
 
 
 class LCESN(LayeredESN):
