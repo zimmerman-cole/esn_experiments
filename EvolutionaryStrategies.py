@@ -49,7 +49,7 @@ class EvolutionaryStrategiesOptimiser(object):
 
         self.verbose = verbose
         self.base_run_rate = 1 
-        self.SAVE_RATE = 20
+        self.SAVE_RATE = 4
 
     def sample_population(self):
         # each individual in a population is a certain amount of noise which we add to the
