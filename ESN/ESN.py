@@ -380,7 +380,7 @@ class DHESN(LayeredESN):
 
         return x_n
 
-    def train(self, X, y):
+    def train(self, X, y, debug_info=False):
         """ (needs different train() because reservoirs+encoders have to be warmed up+trained one at a time."""
         assert X.shape[1] == self.K, "Training data has unexpected dimensionality (%s). K = %d." % (X.shape, self.K)
         X = X.reshape(-1, self.K)
@@ -424,6 +424,9 @@ class DHESN(LayeredESN):
             S[:, lb:ub] = S_i
 
             inputs = S_i
+            
+            if debug_info:
+                print('res %d mean state magnitude: %.4f' % (i, np.mean(np.abs(S_i))))
 
         D = y[self.init_echo_timesteps:]
         # Solve linear system
