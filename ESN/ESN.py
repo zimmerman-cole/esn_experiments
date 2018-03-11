@@ -238,6 +238,8 @@ class LayeredESN(object):
             reservoir_sizes = [reservoir_sizes]*num_reservoirs
         if type(echo_params) not in [list, np.ndarray]:
             echo_params = [echo_params]*num_reservoirs
+            
+        assert len(reservoir_sizes) == self.num_reservoirs
 
         self.debug = debug
 
@@ -359,9 +361,9 @@ class DHESN(LayeredESN):
     def __reservoir_input_size_rule__(self, reservoir_sizes, echo_params):
         self.reservoirs.append(Reservoir(self.K, reservoir_sizes[0], echo_params[0],
                                          idx=0, debug=self.debug))
-        for i, (size, echo_prm) in enumerate(zip(reservoir_sizes, echo_params[1:])):
+        for i, (size, echo_prm) in enumerate(zip(reservoir_sizes, echo_params)[1:]):
             self.reservoirs.append(Reservoir(
-                input_size=self.reservoirs[i-1].N, num_units=size, echo_param=echo_prm,
+                input_size=self.reservoirs[i].N, num_units=size, echo_param=echo_prm,
                 idx=i+1, debug=self.debug
             ))
 
@@ -393,13 +395,12 @@ class DHESN(LayeredESN):
         delim = np.array([0]+[r.N for r in self.reservoirs])
         for i in range(1, len(delim)):
             delim[i] += delim[i-1]
-
+            
         inputs = X[self.init_echo_timesteps:, :]
         # Now send data into each reservoir one at a time,
         #   and train each encoder one at a time
         for i in range(self.num_reservoirs):
             reservoir = self.reservoirs[i]
-
             # burn-in period (init echo timesteps) ===============================================
             for u_n in inputs:
                 _ = reservoir.forward(u_n)
