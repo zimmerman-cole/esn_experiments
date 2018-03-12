@@ -459,8 +459,7 @@ class Agent(object):
 
         return esn
 
-    def run_episode(self, params):
-
+    def run_episode2(self, params):
         esn = self.params_to_model(params)
 
         esn.train(self.data_train[0], self.data_train[1])
@@ -483,6 +482,48 @@ class Agent(object):
             nrmse_err = MAX_REWARD
 
         return -nrmse_err
+
+    def run_episode(self, params, num_runs=3):
+        esn = self.params_to_model(params)
+
+        errors = np.zeros(num_runs)
+
+        for run_num in range(num_runs):
+            esn.train(self.data_train[0], self.data_train[1])
+
+            # Run generative test, calculate NRMSE
+            y_pred = []
+            u_n = self.data_val[0][0]
+            for _ in range(len(self.data_val[1])):
+                u_n = esn.forward(u_n)
+                y_pred.append(u_n)
+
+            y_pred = np.array(y_pred).squeeze()
+            y_vals = self.data_val[1].squeeze()
+            errors[run_num] = nrmse(y_vals, y_pred, self.MEAN_OF_DATA)
+
+        # Calculate reward =============================
+        failures = errors[np.where(errors >= 1.)[0]]
+        num_failures = len(failures)
+        failure_rate = float(num_failures) / num_runs
+
+        if num_failures != num_runs:
+            sucs = errors[np.where(errors < 1.)[0]]
+            nrmse_suc = np.mean(sucs)
+        else:
+            nrmse_suc = 1.0
+
+        if num_failures != 0:
+            nrmse_fail = np.mean(failures)
+            nrmse_fail_saturated = []
+            for l in [1, 0.001, 0.00001, 1e-10]:
+                sat_err = 1. / (1. + np.exp(-l*nrmse_fail))
+                sat_err = (sat_err - 0.5) * 2.
+                nrmse_fail_saturated.append(sat_err)
+            nrmse_fail_saturated = np.mean(nrmse_fail_saturated)
+
+        return np.mean([failure_rate, 1.1*nrmse_suc, nrmse_fail_saturated])
+
 
 def RunES(episodes, name, population, std, learn_rate, 
             data_train, data_val, MEAN_OF_DATA, base_esn):
