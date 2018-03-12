@@ -9,6 +9,8 @@ import time
 from ESN.ESN import LayeredESN, LCESN, EESN, ESN
 from Helper.utils import nrmse
 
+MAX_REWARD = 1000000
+
 class GeneticAlgorithm(object):
 
     def __init__(self, reward_function, num_params, params_base=None, num_resamples=1,
@@ -65,7 +67,7 @@ class GeneticAlgorithm(object):
                 p[:c] = self.individuals[p1, :c]
                 p[c:] = self.individuals[p2, c:]
                 if self.verbose:
-                    print('crossover--> p1: {}, p2: {} = {}'.format(p1, p2, p))
+                    print('crossover--> p1: {}, p2: {} at {} = {}'.format(p1, p2, c, p))
                 # each gene/nucleotide has a small probability of mutating with some white noise
                 mutation = ((np.random.rand(self.num_params) < self.mutation_prob) > 0.5).astype(int) * np.random.randn(self.num_params)
                 p = np.clip(p + mutation, 0., 2.)
@@ -80,6 +82,7 @@ class GeneticAlgorithm(object):
         # run the population through the reward function
         mean_reward = 0.0
         rewards = []
+        pop_count = 0
         for k in range(np.shape(self.individuals)[0]):
             # run the individual through the objective function
             r = self.reward_function(self.individuals[k, :])
@@ -88,10 +91,12 @@ class GeneticAlgorithm(object):
                 print("INDIVIDUAL {} --> reward: {} \n\t\t PARAMS: {}".format(k, r, self.individuals[k, :]))
 
             self.individuals_fitness[k] = r
-            mean_reward += r
+            if r > -MAX_REWARD:
+                mean_reward += r
+                pop_count += 1
 
         # mean reward of all the behaviours of the pop.
-        mean_reward /= self.population
+        mean_reward /= pop_count
 
         # record cummulative mean reward
         if self.culm_mean_reward == None:
@@ -104,7 +109,7 @@ class GeneticAlgorithm(object):
         # get the new generation
         self.sample_population()
 
-        return mean_reward
+        return mean_reward, pop_count
 
     def play(self):
         r,_ = self.reward_function(self.params_base)
@@ -121,7 +126,7 @@ class GeneticAlgorithm(object):
 
         for i in range(steps):
 
-            mean_reward = self.step()
+            mean_reward, num_survived = self.step()
 
             # run the environment on the base parameters
             if i % self.base_run_rate == 0:
@@ -135,8 +140,8 @@ class GeneticAlgorithm(object):
 
                 self.reward_hist_base.append(self.culm_mean_reward_base)
 
-                print('episode {}, base reward: {}, pop. reward: {}, pop. reward ov. time: {}, base reward ov. time: {}'.format(
-                i, base_run, mean_reward, self.culm_mean_reward, self.culm_mean_reward_base))
+                print('episode {}, base reward: {}, pop. reward: {}, pop. reward ov. time: {}, base reward ov. time: {}, num survived: {}'.format(
+                i, base_run, mean_reward, self.culm_mean_reward, self.culm_mean_reward_base, num_survived))
 
             # save the state every 20 epochs (or the last epochs)
             if i % self.SAVE_RATE == 0 or i > steps - 2:
@@ -456,8 +461,8 @@ class Agent(object):
         nrmse_err = nrmse(y_vals, y_pred, self.MEAN_OF_DATA)
 
         # avoid explosions
-        if nrmse_err > 10000:
-            nrmse_err = 10000
+        if nrmse_err > 10:
+            nrmse_err = MAX_REWARD
 
         return -nrmse_err
 
@@ -492,7 +497,7 @@ def RunGA(episodes, name, population,
     agent = Agent(data_train, data_val, MEAN_OF_DATA, base_esn)
     ga_op = GeneticAlgorithm(
         reward_function=agent.run_episode, num_params=agent.num_params,
-        population=population, verbose=True, num_resamples=1)
+        population=population, verbose=False, num_resamples=1)
 
     ga_op.train(episodes, name)
 
