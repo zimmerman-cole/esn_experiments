@@ -536,15 +536,19 @@ class Agent(object):
         if num_failures != 0:
             nrmse_fail = np.mean(failures)
             nrmse_fail_saturated = []
-            for l in [1, 0.001, 0.00001, 1e-10]:
+            for l in [1, 0.01, 0.001, 0.0001]:
                 sat_err = 1. / (1. + np.exp(-l*nrmse_fail))
                 sat_err = (sat_err - 0.5) * 2.
                 nrmse_fail_saturated.append(sat_err)
             nrmse_fail_saturated = np.mean(nrmse_fail_saturated)
         else:
             nrmse_fail_saturated = 0.
-
-        return -np.mean([failure_rate, 1.1*nrmse_suc, nrmse_fail_saturated])
+        
+        # failure_rate, nrmse_success, nrmse_fail_saturated
+        out = (1. - failure_rate) * nrmse_suc 
+        out += failure_rate * nrmse_fail_saturated
+        return -out
+        #return -np.mean([failure_rate, 1.1*nrmse_suc, nrmse_fail_saturated])
 
 
 def RunES(episodes, name, population, std, learn_rate, 
@@ -569,8 +573,7 @@ def RunES(episodes, name, population, std, learn_rate,
 
     return e_op.reward_hist_pop
 
-def RunGA(episodes, name, population, 
-            data_train, data_val, MEAN_OF_DATA, base_esn):
+def RunGA(episodes, name, population, data_train, data_val, MEAN_OF_DATA, base_esn, verbose=False):
     '''
     Call this function to setup the 'agent' and the GA optimiser to then
     do the optimisation.
