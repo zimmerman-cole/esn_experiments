@@ -217,11 +217,11 @@ class GeneticAlgorithm(object):
                     print("FAILED TO SAVE PARTIAL STATS.")
 
             # look at the last 10 updates and if they are within a std of 3, we have converged
-            if len(self.reward_hist_pop) > -0.1 and self.reward_hist_pop[-1] > -0.1:
-                std_10 = np.std(self.reward_hist_pop[-10:])
-                if std_10 <= 0.3:
-                    print("ENDED DUE TO CONVERGENCE.")
-                    break
+            # if len(self.reward_hist_pop) > -0.1 and self.reward_hist_pop[-1] > -0.1:
+            #     std_10 = np.std(self.reward_hist_pop[-10:])
+            #     if std_10 <= 0.3:
+            #         print("ENDED DUE TO CONVERGENCE.")
+            #         break
 
         print('WARNING: No convergence achieved.')
 
@@ -535,8 +535,10 @@ class Agent(object):
                 sat_err = (sat_err - 0.5) * 2.
                 nrmse_fail_saturated.append(sat_err)
             nrmse_fail_saturated = np.mean(nrmse_fail_saturated)
+        else:
+            nrmse_fail_saturated = 0.
 
-        return np.mean([failure_rate, 1.1*nrmse_suc, nrmse_fail_saturated])
+        return -np.mean([failure_rate, 1.1*nrmse_suc, nrmse_fail_saturated])
 
 
 def RunES(episodes, name, population, std, learn_rate, 
@@ -582,4 +584,4 @@ def RunGA(episodes, name, population,
     except:
         print('FAILED TO SAVE MODEL:'+name)
 
-    return e_op.reward_hist_pop
+    # return e_op.reward_hist_pop
