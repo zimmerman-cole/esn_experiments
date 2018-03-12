@@ -31,11 +31,12 @@ class Reservoir(object):
     num_units  (N): reservoir has N units.
     """
 
-    def __init__(self, input_size, num_units, echo_param=0.6, idx=None, debug=False):
+    def __init__(self, input_size, num_units, echo_param=0.6, idx=None, activation=np.tanh, 
+                    debug=False):
         self.K = input_size
         self.N = num_units
         self.echo_param = echo_param
-        self.activation = np.tanh
+        self.activation = activation
         self.idx = idx                # <- can assign reservoir a unique ID for debugging
         self.debug = debug
 
@@ -78,7 +79,7 @@ class Reservoir(object):
         self.W_in *= self.input_weights_scale
         self.ins_init = True
 
-    def initialize_reservoir_weights(self, strategy='uniform', spectral_scale=1.0, offset=0.5):
+    def initialize_reservoir_weights(self, strategy='uniform', spectral_scale=1.0, offset=0.5, sparsity=1.0):
         self.spectral_scale = spectral_scale
         self.W_res_init_strategy = strategy
         if strategy == 'binary':
@@ -89,6 +90,10 @@ class Reservoir(object):
             self.W_res = np.random.randn(self.N, self.N)
         else:
             raise ValueError('unknown res. weight init strategy %s' % strategy)
+
+        # apply the sparsity
+        sparsity_matrix = (np.random.rand(self.N, self.N) < sparsity).astype(float)
+        self.W_res *= sparsity_matrix
 
         self.W_res -= offset
         self.W_res /= max(abs(la.eig(self.W_res)[0]))
@@ -122,14 +127,15 @@ class ESN(object):
 
     def __init__(self, input_size, output_size, reservoir_size, echo_param=0.6,
                  output_activation=None, init_echo_timesteps=100, regulariser=1e-8,
-                 debug=False):
+                 activation=np.tanh, debug=False):
         # IMPLEMENTATION STUFF ===================================================
         if input_size != output_size:
             raise NotImplementedError('num input dims must equal num output dims.')
         if output_activation is not None:
             raise NotImplementedError('non-identity output activations not implemented.')
         # ========================================================================
-        self.reservoir = Reservoir(input_size, reservoir_size, echo_param, debug)
+        self.reservoir = Reservoir(input_size=input_size, num_units=reservoir_size, 
+                                    echo_param=echo_param, activation=activation, debug=debug)
         self.K = input_size
         self.N = reservoir_size
         self.L = output_size
@@ -146,8 +152,8 @@ class ESN(object):
     def initialize_input_weights(self, strategy='binary', scale=1e-2):
         self.reservoir.initialize_input_weights(strategy, scale)
 
-    def initialize_reservoir_weights(self, strategy='uniform', spectral_scale=1.0, offset=0.5):
-        self.reservoir.initialize_reservoir_weights(strategy, spectral_scale, offset)
+    def initialize_reservoir_weights(self, strategy='uniform', spectral_scale=1.0, offset=0.5, sparsity=1.0):
+        self.reservoir.initialize_reservoir_weights(strategy, spectral_scale, offset, sparsity)
 
     def forward(self, u_n):
         u_n = u_n.squeeze()
@@ -223,7 +229,7 @@ class LayeredESN(object):
 
     def __init__(self, input_size, output_size, num_reservoirs, reservoir_sizes=None,
                  echo_params=0.6, output_activation=None, init_echo_timesteps=100,
-                 regulariser=1e-8, debug=False):
+                 regulariser=1e-8, activation=np.tanh, debug=False):
         # IMPLEMENTATION STUFF ===================================================
         if input_size != output_size:
             raise NotImplementedError('num input dims must equal num output dims.')
@@ -248,7 +254,7 @@ class LayeredESN(object):
         self.debug = debug
 
         # initialize reservoirs
-        self.__reservoir_input_size_rule__(reservoir_sizes, echo_params)
+        self.__reservoir_input_size_rule__(reservoir_sizes, echo_params, activation)
 
         self.regulariser = regulariser
         self.init_echo_timesteps = init_echo_timesteps
@@ -272,7 +278,7 @@ class LayeredESN(object):
         for i, (strat, scale) in enumerate(zip(strategies, scales)):
             self.reservoirs[i].initialize_input_weights(strategy=strat, scale=scale)
 
-    def initialize_reservoir_weights(self, strategies='uniform', spectral_scales=1.0, offsets=0.5):
+    def initialize_reservoir_weights(self, strategies='uniform', spectral_scales=1.0, offsets=0.5, sparsity=1.0):
         if type(strategies) not in [list, np.ndarray]:
             strategies = [strategies]*self.num_reservoirs
         if type(spectral_scales) not in [list, np.ndarray]:
@@ -281,7 +287,7 @@ class LayeredESN(object):
             offsets = [offsets]*self.num_reservoirs
 
         for i, (strat, scale, offset) in enumerate(zip(strategies, spectral_scales, offsets)):
-            self.reservoirs[i].initialize_reservoir_weights(strat, scale, offset)
+            self.reservoirs[i].initialize_reservoir_weights(strat, scale, offset, sparsity=sparsity)
 
     @abstractmethod
     def __forward_routing_rule__(self, u_n):
@@ -353,7 +359,14 @@ class LayeredESN(object):
 class DHESN(LayeredESN):
 
     def __init__(self, *args, **kwargs):
+        if 'dim_reduce' not in kwargs.keys():
+            self.dim_reduce = 100
+        else:
+            self.dim_reduce = kwargs['dim_reduce'] #100
+            del kwargs['dim_reduce']
+        
         super(DHESN, self).__init__(*args, **kwargs)
+        
         if 'encoder_type' not in kwargs.keys():
             kwargs['encoder_type'] = 'PCA'
 
@@ -362,17 +375,22 @@ class DHESN(LayeredESN):
 
         if self.encoder_type == 'PCA':
             for j in range(1, self.num_reservoirs):
-                self.encoders.append(PCA(n_components=self.reservoirs[j-1].N))
+                # self.encoders.append(PCA(n_components=self.reservoirs[j-1].N))
+                self.encoders.append(PCA(n_components=self.dim_reduce))
         else:
             raise NotImplementedError('non-PCA encodings not done yet')
 
-    def __reservoir_input_size_rule__(self, reservoir_sizes, echo_params):
+    def __reservoir_input_size_rule__(self, reservoir_sizes, echo_params, activation):
         self.reservoirs.append(Reservoir(self.K, reservoir_sizes[0], echo_params[0],
                                          idx=0, debug=self.debug))
         for i, (size, echo_prm) in enumerate(zip(reservoir_sizes, echo_params)[1:]):
+            # self.reservoirs.append(Reservoir(
+            #     input_size=self.reservoirs[i].N, num_units=size, echo_param=echo_prm,
+            #     idx=i+1, activation=activation, debug=self.debug
+            # ))
             self.reservoirs.append(Reservoir(
-                input_size=self.reservoirs[i].N, num_units=size, echo_param=echo_prm,
-                idx=i+1, debug=self.debug
+                input_size=self.dim_reduce, num_units=size, echo_param=echo_prm,
+                idx=i+1, activation=activation, debug=self.debug
             ))
 
     def __forward_routing_rule__(self, u_n):
@@ -396,11 +414,14 @@ class DHESN(LayeredESN):
         assert self.encoder_type != 'PCA' or np.mean(X) < 1e-3, "Input data must be zero-mean to use PCA encoding."
 
         T = len(X) - self.init_echo_timesteps
-        S = np.zeros((T, self.N+self.K))
+        # S = np.zeros((T, self.N+self.K))
+        # S = np.zeros((T, 5))
+        S = np.zeros((T, (len(self.reservoirs)-1)*self.dim_reduce+self.K+self.reservoirs[-1].N))
         # S: collection of extended system states (encoder outputs plus inputs)
         #     at each time-step t
         S[:, -self.K:] = X[self.init_echo_timesteps:]
-        delim = np.array([0]+[r.N for r in self.reservoirs])
+        # delim = np.array([0]+[r.N for r in self.reservoirs])
+        delim = np.array([0]+[self.dim_reduce]*(len(self.reservoirs)-1)+[self.reservoirs[-1].N])
         for i in range(1, len(delim)):
             delim[i] += delim[i-1]
             
@@ -428,6 +449,8 @@ class DHESN(LayeredESN):
                 encoder.fit(S_i)
                 S_i = encoder.transform(S_i)
 
+            print(np.shape(S_i))
+            print(np.shape(S))
             lb, ub = delim[i], delim[i+1]
             S[:, lb:ub] = S_i
 
@@ -439,7 +462,8 @@ class DHESN(LayeredESN):
         D = y[self.init_echo_timesteps:]
         # Solve linear system
         T1 = np.dot(D.T, S)
-        T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye(self.K + self.N))
+        # T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye(self.K + self.N))
+        T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye((len(self.reservoirs)-1)*self.dim_reduce+self.K+self.reservoirs[-1].N))
         self.W_out = np.dot(T1, T2)
 
     def getInputSize(self): return self.K
@@ -473,14 +497,14 @@ class LCESN(LayeredESN):
 
 class EESN(LayeredESN):
 
-    def __reservoir_input_size_rule__(self, reservoir_sizes, echo_params):
+    def __reservoir_input_size_rule__(self, reservoir_sizes, echo_params, activation):
         """
         Set up the reservoirs so that they all take the input signal as input.
         """
         for i, (size, echo_prm) in enumerate(zip(reservoir_sizes, echo_params)):
             self.reservoirs.append(Reservoir(
                 input_size=self.K, num_units=size, echo_param=echo_prm,
-                idx=i, debug=self.debug
+                idx=i, activation=activation, debug=self.debug
             ))
 
     def __forward_routing_rule__(self, u_n):

@@ -13,7 +13,9 @@ MAX_REWARD = 1000000
 class GeneticAlgorithm(object):
 
     def __init__(self, reward_function, num_params, params_base=None, num_resamples=1,
-                population=20, mutation_prob=0.05, selection_strategy='roulette', 
+                population=20, mutation_prob=0.1, 
+                selection_strategy='roulette', # roulette
+                generation_update_strategy='elitismWR', # elitismWR (With Replacement), elitism, reset
                 verbose=False, seed=None):
         '''
         reward_function:    objective function to MAXIMISE
@@ -40,6 +42,7 @@ class GeneticAlgorithm(object):
 
         self.mutation_prob = mutation_prob
         self.selection_strategy = selection_strategy
+        self.generation_update_strategy = generation_update_strategy
 
         self.verbose = verbose
         self.base_run_rate = 1 
@@ -89,6 +92,17 @@ class GeneticAlgorithm(object):
             else:
                 raise NotImplementedError('no selection strategy other than roulette implemented.')
 
+        if self.generation_update_strategy == 'reset':
+            pass
+        elif self.generation_update_strategy == 'elitismWR':
+            # keep one-third the parents
+            for k in range(0, self.population/3, self.num_resamples):
+                if self.selection_strategy == 'roulette':
+                    p = np.argwhere(pop_probs > np.random.rand())[0][0]
+                    if self.verbose:
+                        print("keeping {} from old gen.".format(p))
+                    new_generation[k, :] = self.individuals[p, :] 
+        
         # completely replace the old generation
         self.individuals = new_generation
 
@@ -203,11 +217,11 @@ class GeneticAlgorithm(object):
                     print("FAILED TO SAVE PARTIAL STATS.")
 
             # look at the last 10 updates and if they are within a std of 3, we have converged
-            if len(self.reward_hist_pop) > -0.1 and self.reward_hist_pop[-1] > -0.1:
-                std_10 = np.std(self.reward_hist_pop[-10:])
-                if std_10 <= 0.3:
-                    print("ENDED DUE TO CONVERGENCE.")
-                    break
+            # if len(self.reward_hist_pop) > -0.1 and self.reward_hist_pop[-1] > -0.1:
+            #     std_10 = np.std(self.reward_hist_pop[-10:])
+            #     if std_10 <= 0.3:
+            #         print("ENDED DUE TO CONVERGENCE.")
+            #         break
 
         print('WARNING: No convergence achieved.')
 
@@ -554,11 +568,11 @@ def RunGA(episodes, name, population, data_train, data_val, MEAN_OF_DATA, base_e
     Call this function to setup the 'agent' and the GA optimiser to then
     do the optimisation.
     '''
+    name = "Results/"+name
     agent = Agent(data_train, data_val, MEAN_OF_DATA, base_esn)
     ga_op = GeneticAlgorithm(
         reward_function=agent.run_episode, num_params=agent.num_params,
-        population=population, verbose=verbose, num_resamples=1
-    )
+        population=population, verbose=True, num_resamples=1)
 
     ga_op.train(episodes, name)
 
@@ -569,5 +583,4 @@ def RunGA(episodes, name, population, data_train, data_val, MEAN_OF_DATA, base_e
     except:
         print('FAILED TO SAVE MODEL:'+name)
 
-    return e_op.reward_hist_pop
-
+    # return e_op.reward_hist_pop
