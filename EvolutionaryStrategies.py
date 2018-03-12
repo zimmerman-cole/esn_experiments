@@ -13,7 +13,7 @@ MAX_REWARD = 1000000
 class GeneticAlgorithm(object):
 
     def __init__(self, reward_function, num_params, params_base=None, num_resamples=1,
-                population=20, mutation_prob=0.1, 
+                population=20, mutation_prob=0.1, mutation_scale=0.1, 
                 selection_strategy='roulette', # roulette
                 generation_update_strategy='elitismWR', # elitismWR (With Replacement), elitism, reset
                 verbose=False, seed=None):
@@ -41,6 +41,7 @@ class GeneticAlgorithm(object):
         self.reward_hist_base = []
 
         self.mutation_prob = mutation_prob
+        self.mutation_scale = mutation_scale
         self.selection_strategy = selection_strategy
         self.generation_update_strategy = generation_update_strategy
 
@@ -82,8 +83,12 @@ class GeneticAlgorithm(object):
                 # mutation ===========================================
                 # each gene/nucleotide has a small probability of mutating with some Gaussian white noise
                 mutated_idx = (np.random.rand(self.num_params) < self.mutation_prob).astype(int)
-                mutation = mutated_idx * np.random.randn(self.num_params)
-                p = np.clip(p + mutation, 0., 2.)
+                mutation = mutated_idx * np.random.randn(self.num_params) * self.mutation_scale
+                # p = np.clip(p + mutation, 0., 2.)
+                clip_rate = int(self.num_params / 3.)
+                p[:clip_rate] = np.clip(p[:clip_rate], 0., 1.)
+                p[clip_rate:clip_rate*2] = np.clip(p[clip_rate:clip_rate*2], 0., 1.5)
+                p[clip_rate*2:clip_rate*3] = np.clip(p[clip_rate*2:clip_rate*3], 0., 1.5)
 
                 if self.verbose:
                     print('mutation--> p: {}'.format(p))
