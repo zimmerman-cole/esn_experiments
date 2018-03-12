@@ -61,4 +61,4 @@ if __name__ == '__main__':
     #         (X_train, y_train), (X_valid, y_valid), MEAN_OF_DATA, base_esn)
 
     RunGA(episodes, name, population,
-            (X_train, y_train), (X_valid, y_valid), MEAN_OF_DATA, base_esn)
+            (X_train, y_train), (X_valid, y_valid), MEAN_OF_DATA, base_esn, verbose=True)

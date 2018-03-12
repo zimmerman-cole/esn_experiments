@@ -521,8 +521,10 @@ class Agent(object):
                 sat_err = (sat_err - 0.5) * 2.
                 nrmse_fail_saturated.append(sat_err)
             nrmse_fail_saturated = np.mean(nrmse_fail_saturated)
+        else:
+            nrmse_fail_saturated = 0.
 
-        return np.mean([failure_rate, 1.1*nrmse_suc, nrmse_fail_saturated])
+        return -np.mean([failure_rate, 1.1*nrmse_suc, nrmse_fail_saturated])
 
 
 def RunES(episodes, name, population, std, learn_rate, 
@@ -547,8 +549,7 @@ def RunES(episodes, name, population, std, learn_rate,
 
     return e_op.reward_hist_pop
 
-def RunGA(episodes, name, population, 
-            data_train, data_val, MEAN_OF_DATA, base_esn):
+def RunGA(episodes, name, population, data_train, data_val, MEAN_OF_DATA, base_esn, verbose=False):
     '''
     Call this function to setup the 'agent' and the GA optimiser to then
     do the optimisation.
@@ -556,7 +557,8 @@ def RunGA(episodes, name, population,
     agent = Agent(data_train, data_val, MEAN_OF_DATA, base_esn)
     ga_op = GeneticAlgorithm(
         reward_function=agent.run_episode, num_params=agent.num_params,
-        population=population, verbose=False, num_resamples=1)
+        population=population, verbose=verbose, num_resamples=1
+    )
 
     ga_op.train(episodes, name)
 
