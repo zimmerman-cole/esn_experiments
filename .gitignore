@@ -6,3 +6,4 @@
 outfile
 errfile
 .idea/
+*partial*
