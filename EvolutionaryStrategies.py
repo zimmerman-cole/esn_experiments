@@ -14,7 +14,9 @@ MAX_REWARD = 1000000
 class GeneticAlgorithm(object):
 
     def __init__(self, reward_function, num_params, params_base=None, num_resamples=1,
-                population=20, mutation_prob=0.05, selection_strategy='roulette', 
+                population=20, mutation_prob=0.1, 
+                selection_strategy='roulette', # roulette
+                generation_update_strategy='elitismWR', # elitismWR (With Replacement), elitism, reset
                 verbose=False, seed=None):
         '''
         reward_function:    objective function to MAXIMISE
@@ -41,6 +43,7 @@ class GeneticAlgorithm(object):
 
         self.mutation_prob = mutation_prob
         self.selection_strategy = selection_strategy
+        self.generation_update_strategy = generation_update_strategy
 
         self.verbose = verbose
         self.base_run_rate = 1 
@@ -75,6 +78,17 @@ class GeneticAlgorithm(object):
                     print('mutation--> p: {}'.format(p))
                 new_generation[k:(k+self.num_resamples), :] = p
 
+        if self.generation_update_strategy == 'reset':
+            pass
+        elif self.generation_update_strategy == 'elitismWR':
+            # keep one-third the parents
+            for k in range(0, self.population/3, self.num_resamples):
+                if self.selection_strategy == 'roulette':
+                    p = np.argwhere(pop_probs > np.random.rand())[0][0]
+                    if self.verbose:
+                        print("keeping {} from old gen.".format(p))
+                    new_generation[k, :] = self.individuals[p, :] 
+        
         # completely replace the old generation
         self.individuals = new_generation
 
@@ -494,10 +508,11 @@ def RunGA(episodes, name, population,
     Call this function to setup the 'agent' and the GA optimiser to then
     do the optimisation.
     '''
+    name = "Results/"+name
     agent = Agent(data_train, data_val, MEAN_OF_DATA, base_esn)
     ga_op = GeneticAlgorithm(
         reward_function=agent.run_episode, num_params=agent.num_params,
-        population=population, verbose=False, num_resamples=1)
+        population=population, verbose=True, num_resamples=1)
 
     ga_op.train(episodes, name)
 
@@ -509,4 +524,3 @@ def RunGA(episodes, name, population,
         print('FAILED TO SAVE MODEL:'+name)
 
     return e_op.reward_hist_pop
-
