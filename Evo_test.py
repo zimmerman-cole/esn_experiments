@@ -28,11 +28,11 @@ if __name__ == '__main__':
     #
     #=================================
     episodes = 1000
-    name = "ESN_GA_SIGMOID_"
-    population = 15
+    name = "ESN_1000_RES_"
+    population = 30
     std = 0.01
     learn_rate = 0.001
-    base_esn = ESN(input_size=1, output_size=1, reservoir_size=500, regulariser=1e-7)
+    base_esn = ESN(input_size=1, output_size=1, reservoir_size=1000, regulariser=1e-5)
     # base_esn = ESN(input_size=1, output_size=1, reservoir_size=300, regulariser=1e-6)
     base_esn.initialize_input_weights(scale=1.0)
     base_esn.initialize_reservoir_weights(spectral_scale=1.25)

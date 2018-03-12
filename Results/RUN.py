@@ -10,4 +10,4 @@ def run(filename):
     plt.show()
 
 if __name__ == "__main__":
-    run("ESN_GA__DATApartial.pkl")
+    run("ESN_GA_SIGMOID__DATApartial.pkl")

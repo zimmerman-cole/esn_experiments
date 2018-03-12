@@ -6,7 +6,7 @@ import datetime
 import time
 
 from ESN.ESN import LayeredESN, LCESN, EESN, ESN
-from Helper.utils import nrmse
+from Helper.utils import nrmse, LivePlotHistogram, LiveDataGraph
 
 MAX_REWARD = 1000000
 
@@ -14,7 +14,7 @@ class GeneticAlgorithm(object):
 
     def __init__(self, reward_function, num_params, params_base=None, num_resamples=1,
                 population=20, mutation_prob=0.1, mutation_scale=0.1, 
-                selection_strategy='roulette', # roulette
+                selection_strategy='ranked', # roulette, ranked
                 generation_update_strategy='elitismWR', # elitismWR (With Replacement), elitism, reset
                 verbose=False, seed=None):
         '''
@@ -32,7 +32,7 @@ class GeneticAlgorithm(object):
 
         self.num_resamples = num_resamples
         self.population = population * self.num_resamples     # number of individuals in one population
-        self.individuals = np.clip(np.random.rand(self.population, self.num_params), 0, 2) # the population, itself
+        self.individuals = np.random.rand(self.population, self.num_params) # the population, itself
         self.individuals_fitness = np.zeros(self.population)  # the fitness of each member of the population
 
         self.culm_mean_reward = None
@@ -52,51 +52,96 @@ class GeneticAlgorithm(object):
         self.best_individual = np.zeros(self.num_params)
         self.params_base = params_base
 
+        self.lph_pop = None
+        self.lph_fitness = None
+        self.lp_best = None
+        self.lp_pop = None
+        self.init_live_plotting()
+
+    def init_live_plotting(self):
+        def get_gene(i):
+            return self.individuals[:, i]
+        def get_echo(): 
+            return get_gene(0)
+        def get_spectral():
+            return get_gene(1)
+        def get_weightin():
+            return get_gene(2)
+        
+        def get_fitness():
+            return self.individuals_fitness
+
+        def get_best_hist():
+            d = [0]*2+self.reward_hist_base
+            return range(len(d)), d
+        def get_pop_hist():
+            d = [0]*2+self.reward_hist_pop
+            return range(len(d)), d
+
+        self.lph_pop = LivePlotHistogram([get_echo, get_spectral, get_weightin], title="POPULATION (LIVE)",
+                    names=["ECHO", "SPECT", "WEIGHTIN"])
+        # plotted twice for hack. Should add another thing for data evaluation anyway
+        self.lph_fitness = LivePlotHistogram([get_fitness, get_fitness], title="FITNESS (LIVE)",
+                    names=["FITNESS", "FITNESS"])
+
+        self.lp_best = LiveDataGraph(get_best_hist, title="BEST FITNESS (LIVE)")
+        self.lp_pop = LiveDataGraph(get_pop_hist, title="AVG. POPULATION FITNESS (LIVE)")
+
     def sample_population(self):
         """ Form a new population/generation from the old generation. """
         new_generation = np.zeros((self.population, self.num_params))
 
         # invert the fitnesses because then smaller values are BETTER
-        inv_fit = 1./self.individuals_fitness
-        fit_norm = inv_fit / np.sum(inv_fit)
-        pop_probs = np.cumsum(fit_norm)
+        if self.selection_strategy == 'roulette':
+            inv_fit = 1./self.individuals_fitness
+            fit_norm = inv_fit / np.sum(inv_fit)
+            pop_probs = np.cumsum(fit_norm)
+
+        elif self.selection_strategy == 'ranked':
+            # sort based on fitness
+            idx_sort = self.individuals_fitness.argsort()
+            self.individuals = self.individuals[idx_sort, :]
+            # exponential probability selection
+            inv_fit = 1./np.array(range(1, self.population))
+            fit_norm = inv_fit / np.sum(inv_fit)
+            pop_probs = np.cumsum(fit_norm)
+        else:
+            raise NotImplementedError('no selection strategy other than roulette/ranked implemented.')
 
         if self.verbose:
-            print('roulette probs: {}'.format(pop_probs))
+            print('selection probs: {}'.format(pop_probs))
 
         for k in range(0, self.population, self.num_resamples):
-            if self.selection_strategy == 'roulette':
-                # sample an individual using the roulette strategy
-                p1 = np.argwhere(pop_probs > np.random.rand())[0][0]  # first parent
-                p2 = np.argwhere(pop_probs > np.random.rand())[0][0]  # second parent
+            # if self.selection_strategy == 'roulette':
+            # sample an individual using the roulette strategy
+            p1 = np.argwhere(pop_probs > np.random.rand())[0][0]  # first parent
+            p2 = np.argwhere(pop_probs > np.random.rand())[0][0]  # second parent
 
-                # cross-over =========================================
-                # using single-point technique
-                c = int(np.random.rand() * self.num_params)   # crossover point is chosen u.a.r. from [0, num_params-1]
-                p = np.zeros(self.num_params)                 # child chromosome
-                p[:c] = self.individuals[p1, :c]              # ^
-                p[c:] = self.individuals[p2, c:]              # ^
+            # cross-over =========================================
+            # using single-point technique
+            c = int(np.random.rand() * self.num_params)   # crossover point is chosen u.a.r. from [0, num_params-1]
+            p = np.zeros(self.num_params)                 # child chromosome
+            p[:c] = self.individuals[p1, :c]              # ^
+            p[c:] = self.individuals[p2, c:]              # ^
 
-                if self.verbose:
-                    print('crossover--> p1: {}, p2: {} at {} = {}'.format(p1, p2, c, p))
+            if self.verbose:
+                print('crossover--> p1: {}, p2: {} at {} = {}'.format(p1, p2, c, p))
 
-                # mutation ===========================================
-                # each gene/nucleotide has a small probability of mutating with some Gaussian white noise
-                mutated_idx = (np.random.rand(self.num_params) < self.mutation_prob).astype(int)
-                mutation = mutated_idx * np.random.randn(self.num_params) * self.mutation_scale
-                p += mutation
-                # p = np.clip(p + mutation, 0., 2.)
-                clip_rate = int(self.num_params / 3.)
-                p[:clip_rate] = np.clip(p[:clip_rate], 0., 1.)
-                p[clip_rate:clip_rate*2] = np.clip(p[clip_rate:clip_rate*2], 0., 1.5)
-                p[clip_rate*2:clip_rate*3] = np.clip(p[clip_rate*2:clip_rate*3], 0., 1.5)
+            # mutation ===========================================
+            # each gene/nucleotide has a small probability of mutating with some Gaussian white noise
+            mutated_idx = (np.random.rand(self.num_params) < self.mutation_prob).astype(int)
+            mutation = mutated_idx * np.random.randn(self.num_params) * self.mutation_scale
+            p += mutation
+            # p = np.clip(p + mutation, 0., 2.)
+            clip_rate = int(self.num_params / 3.)
+            p[:clip_rate] = np.clip(p[:clip_rate], 0., 1.)
+            p[clip_rate:clip_rate*2] = np.clip(p[clip_rate:clip_rate*2], 0., 1.5)
+            p[clip_rate*2:clip_rate*3] = np.clip(p[clip_rate*2:clip_rate*3], 0., 1.5)
 
-                if self.verbose:
-                    print('mutation ({})--> p: {}'.format(mutation, p))
+            if self.verbose:
+                print('mutation ({})--> p: {}'.format(mutation, p))
 
-                new_generation[k:(k+self.num_resamples), :] = p
-            else:
-                raise NotImplementedError('no selection strategy other than roulette implemented.')
+            new_generation[k:(k+self.num_resamples), :] = p
 
         if self.generation_update_strategy == 'reset':
             pass
@@ -142,6 +187,16 @@ class GeneticAlgorithm(object):
             self.culm_mean_reward = 0.9*self.culm_mean_reward + 0.1*mean_reward
 
         self.reward_hist_pop.append(self.culm_mean_reward)
+
+        # update the plot of the population diversities
+        if self.lph_pop is not None:
+            self.lph_pop.run()
+        if self.lph_fitness is not None:
+            self.lph_fitness.run()
+        if self.lp_pop is not None:
+            self.lp_pop.run()
+        if self.lp_best is not None:
+            self.lp_best.run()
 
         # get the new generation
         self.sample_population()
