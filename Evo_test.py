@@ -28,7 +28,7 @@ if __name__ == '__main__':
     #
     #=================================
     episodes = 1000
-    name = "ESN_GA_"
+    name = "ESN_GA_SIGMOID_"
     population = 15
     std = 0.01
     learn_rate = 0.001
