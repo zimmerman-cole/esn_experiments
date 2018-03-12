@@ -41,6 +41,7 @@ class GeneticAlgorithm(object):
         self.reward_hist_base = []
 
         self.mutation_prob = mutation_prob
+        self.mutation_scale = mutation_scale
         self.selection_strategy = selection_strategy
         self.generation_update_strategy = generation_update_strategy
 
@@ -82,7 +83,7 @@ class GeneticAlgorithm(object):
                 # mutation ===========================================
                 # each gene/nucleotide has a small probability of mutating with some Gaussian white noise
                 mutated_idx = (np.random.rand(self.num_params) < self.mutation_prob).astype(int)
-                mutation = mutated_idx * np.random.randn(self.num_params)
+                mutation = mutated_idx * np.random.randn(self.num_params) * self.mutation_scale
                 # p = np.clip(p + mutation, 0., 2.)
                 clip_rate = self.num_params / 3.
                 p[:clip_rate] = np.clip(p[:clip_rate], 0., 1.)
