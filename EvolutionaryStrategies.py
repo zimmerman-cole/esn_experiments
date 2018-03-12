@@ -85,7 +85,7 @@ class GeneticAlgorithm(object):
                 mutated_idx = (np.random.rand(self.num_params) < self.mutation_prob).astype(int)
                 mutation = mutated_idx * np.random.randn(self.num_params) * self.mutation_scale
                 # p = np.clip(p + mutation, 0., 2.)
-                clip_rate = self.num_params / 3.
+                clip_rate = int(self.num_params / 3.)
                 p[:clip_rate] = np.clip(p[:clip_rate], 0., 1.)
                 p[clip_rate:clip_rate*2] = np.clip(p[clip_rate:clip_rate*2], 0., 1.5)
                 p[clip_rate*2:clip_rate*3] = np.clip(p[clip_rate*2:clip_rate*3], 0., 1.5)
