@@ -84,6 +84,7 @@ class GeneticAlgorithm(object):
                 # each gene/nucleotide has a small probability of mutating with some Gaussian white noise
                 mutated_idx = (np.random.rand(self.num_params) < self.mutation_prob).astype(int)
                 mutation = mutated_idx * np.random.randn(self.num_params) * self.mutation_scale
+                p += mutation
                 # p = np.clip(p + mutation, 0., 2.)
                 clip_rate = int(self.num_params / 3.)
                 p[:clip_rate] = np.clip(p[:clip_rate], 0., 1.)
@@ -91,7 +92,7 @@ class GeneticAlgorithm(object):
                 p[clip_rate*2:clip_rate*3] = np.clip(p[clip_rate*2:clip_rate*3], 0., 1.5)
 
                 if self.verbose:
-                    print('mutation--> p: {}'.format(p))
+                    print('mutation ({})--> p: {}'.format(mutation, p))
 
                 new_generation[k:(k+self.num_resamples), :] = p
             else:
