@@ -1,6 +1,5 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import gym
 import pickle as pkl
 
 import datetime
@@ -30,13 +29,13 @@ class GeneticAlgorithm(object):
         self.num_params = num_params
 
         self.num_resamples = num_resamples
-        self.population = population * self.num_resamples
-        self.individuals = np.clip(np.random.rand(self.population, self.num_params), 0, 2)
-        self.individuals_fitness = np.zeros(self.population)
+        self.population = population * self.num_resamples     # number of individuals in one population
+        self.individuals = np.clip(np.random.rand(self.population, self.num_params), 0, 2) # the population, itself
+        self.individuals_fitness = np.zeros(self.population)  # the fitness of each member of the population
 
         self.culm_mean_reward = None
         self.culm_mean_reward_base = None
-        self.reward_hist_pop = []
+        self.reward_hist_pop = []             # list of cumulative mean rewards for each step of optimization
         self.reward_hist_base = []
 
         self.mutation_prob = mutation_prob
@@ -47,38 +46,54 @@ class GeneticAlgorithm(object):
         self.SAVE_RATE = 4
 
         self.best_individual = np.zeros(self.num_params)
+        self.params_base = params_base
 
     def sample_population(self):
+        """ Form a new population/generation from the old generation. """
         new_generation = np.zeros((self.population, self.num_params))
+
         # invert the fitnesses because then smaller values are BETTER
         inv_fit = 1./self.individuals_fitness
         fit_norm = inv_fit / np.sum(inv_fit)
         pop_probs = np.cumsum(fit_norm)
+
         if self.verbose:
             print('roulette probs: {}'.format(pop_probs))
+
         for k in range(0, self.population, self.num_resamples):
             if self.selection_strategy == 'roulette':
                 # sample an individual using the roulette strategy
-                p1 = np.argwhere(pop_probs > np.random.rand())[0][0]
-                p2 = np.argwhere(pop_probs > np.random.rand())[0][0]
-                #cross-over
-                c = int(np.random.rand() * self.num_params)
-                p = np.zeros(self.num_params)
-                p[:c] = self.individuals[p1, :c]
-                p[c:] = self.individuals[p2, c:]
+                p1 = np.argwhere(pop_probs > np.random.rand())[0][0]  # first parent
+                p2 = np.argwhere(pop_probs > np.random.rand())[0][0]  # second parent
+
+                # cross-over =========================================
+                # using single-point technique
+                c = int(np.random.rand() * self.num_params)   # crossover point is chosen u.a.r. from [0, num_params-1]
+                p = np.zeros(self.num_params)                 # child chromosome
+                p[:c] = self.individuals[p1, :c]              # ^
+                p[c:] = self.individuals[p2, c:]              # ^
+
                 if self.verbose:
                     print('crossover--> p1: {}, p2: {} at {} = {}'.format(p1, p2, c, p))
-                # each gene/nucleotide has a small probability of mutating with some white noise
-                mutation = ((np.random.rand(self.num_params) < self.mutation_prob) > 0.5).astype(int) * np.random.randn(self.num_params)
+
+                # mutation ===========================================
+                # each gene/nucleotide has a small probability of mutating with some Gaussian white noise
+                mutated_idx = (np.random.rand(self.num_params) < self.mutation_prob).astype(int)
+                mutation = mutated_idx * np.random.randn(self.num_params)
                 p = np.clip(p + mutation, 0., 2.)
+
                 if self.verbose:
                     print('mutation--> p: {}'.format(p))
+
                 new_generation[k:(k+self.num_resamples), :] = p
+            else:
+                raise NotImplementedError('no selection strategy other than roulette implemented.')
 
         # completely replace the old generation
         self.individuals = new_generation
 
     def step(self):
+        """ Calculates fitness of each member of current population, then spawns a new generation. """
         # run the population through the reward function
         mean_reward = 0.0
         rewards = []
@@ -91,6 +106,8 @@ class GeneticAlgorithm(object):
                 print("INDIVIDUAL {} --> reward: {} \n\t\t PARAMS: {}".format(k, r, self.individuals[k, :]))
 
             self.individuals_fitness[k] = r
+
+            # Test for survival
             if r > -MAX_REWARD:
                 mean_reward += r
                 pop_count += 1
@@ -98,8 +115,8 @@ class GeneticAlgorithm(object):
         # mean reward of all the behaviours of the pop.
         mean_reward /= pop_count
 
-        # record cummulative mean reward
-        if self.culm_mean_reward == None:
+        # record cumulative mean reward
+        if self.culm_mean_reward is None:
             self.culm_mean_reward = mean_reward
         else:
             self.culm_mean_reward = 0.9*self.culm_mean_reward + 0.1*mean_reward
@@ -116,23 +133,21 @@ class GeneticAlgorithm(object):
         print("reward received: {}".format(r))
         return r
 
-    def train(self, steps, name):
-
+    def train(self, num_steps, name):
         # store the start time
         start_time_sec = time.time()
 
         # best base score so far (so we can save only the best model)
         best_base = -100000
 
-        for i in range(steps):
-
+        for i in range(num_steps):
             mean_reward, num_survived = self.step()
 
             # run the environment on the base parameters
             if i % self.base_run_rate == 0:
                 self.best_individual = self.individuals[np.argmax(self.individuals_fitness), :]
                 base_run = self.reward_function(self.best_individual)
-                # record cummulative mean reward of the base params
+                # record cumulative mean reward of the base params
                 if self.culm_mean_reward_base == None:
                     self.culm_mean_reward_base = base_run
                 else:
@@ -141,10 +156,11 @@ class GeneticAlgorithm(object):
                 self.reward_hist_base.append(self.culm_mean_reward_base)
 
                 print('episode {}, base reward: {}, pop. reward: {}, pop. reward ov. time: {}, base reward ov. time: {}, num survived: {}'.format(
-                i, base_run, mean_reward, self.culm_mean_reward, self.culm_mean_reward_base, num_survived))
+                    i, base_run, mean_reward, self.culm_mean_reward, self.culm_mean_reward_base, num_survived)
+                )
 
             # save the state every 20 epochs (or the last epochs)
-            if i % self.SAVE_RATE == 0 or i > steps - 2:
+            if i % self.SAVE_RATE == 0 or i > (num_steps - 2):
                 # save the MODEL
                 try:
                     f = open(name+'_MODELpartial.pkl', 'wb')
@@ -192,6 +208,8 @@ class GeneticAlgorithm(object):
                 if std_10 <= 0.3:
                     print("ENDED DUE TO CONVERGENCE.")
                     break
+
+        print('WARNING: No convergence achieved.')
 
 
 class EvolutionaryStrategiesOptimiser(object):
@@ -314,7 +332,7 @@ class EvolutionaryStrategiesOptimiser(object):
             # run the environment on the base parameters
             if i % self.base_run_rate == 0:
                 base_run = self.reward_function(self.params_base)
-                # record cummulative mean reward of the base params
+                # record cumulative mean reward of the base params
                 if self.culm_mean_reward_base == None:
                     self.culm_mean_reward_base = base_run
                 else:
