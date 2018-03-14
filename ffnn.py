@@ -15,7 +15,7 @@ import numpy as np
 class FFNN(nn.Module):
     """
     Feedforward neural network for modelling (chaotic) time series data.
-        (currently only works for 1-dimensional data e.g. MackeyGlass).
+        (currently only works for 1-dimensional data e.g. time_series_data).
 
     Args:
         input_size:             Number of frames of context (data for previous time steps).
@@ -253,7 +253,7 @@ if __name__ == "__main__":
     
     # ========================================================================================
     # Get data ===============================================================================
-    from MackeyGlass.MackeyGlassGenerator import run
+    from time_series_data.MackeyGlassGenerator import run
     data = run(num_data_samples=21000)
     data_var = np.var(np.array(data))
     __DATA_VAR__ = np.var(np.array(data))

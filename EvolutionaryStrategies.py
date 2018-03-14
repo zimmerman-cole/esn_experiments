@@ -1,12 +1,10 @@
 import numpy as np
-import matplotlib.pyplot as plt
 import pickle as pkl
 
-import datetime
 import time
 
-from ESN.ESN import LayeredESN, LCESN, EESN, ESN
-from Helper.utils import nrmse, LivePlotHistogram, LiveDataGraph
+from ESN import LCESN, EESN, ESN
+from utils import nrmse, LivePlotHistogram, LiveDataGraph
 
 MAX_REWARD = 1000000
 

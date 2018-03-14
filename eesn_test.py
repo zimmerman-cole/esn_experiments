@@ -1,11 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from ESN.ESN import LCESN, EESN, ESN, DHESN
-from MackeyGlass.MackeyGlassGenerator import run
+from ESN import ESN
+from time_series_data.MackeyGlassGenerator import run
 
-from Helper.utils import nrmse
-
-import datetime
+from utils import nrmse
 
 # def mse(y1, y2):
 #     return np.mean((y1-y2)**2)

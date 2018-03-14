@@ -1,12 +1,8 @@
 import numpy as np
-import matplotlib.pyplot as plt
-from ESN.ESN import LCESN, EESN, ESN
-from MackeyGlass.MackeyGlassGenerator import run
+from ESN import ESN
+from time_series_data.MackeyGlassGenerator import run
 
-from Helper.utils import nrmse
-from EvolutionaryStrategies import RunES, RunGA
-
-import datetime
+from EvolutionaryStrategies import RunGA
 
 if __name__ == '__main__':
     data = np.array([run(6100)]).reshape(-1, 1)
