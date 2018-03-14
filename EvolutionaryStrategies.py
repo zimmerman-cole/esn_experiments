@@ -3,7 +3,7 @@ import pickle as pkl
 
 import time
 
-from ESN import LCESN, EESN, ESN
+from ESN import LCESN, EESN, ESN, DHESN
 from utils import nrmse, LivePlotHistogram, LiveDataGraph
 
 MAX_REWARD = 1000000
@@ -210,11 +210,6 @@ class GeneticAlgorithm(object):
         self.sample_population()
 
         return mean_reward, pop_count
-
-    def play(self):
-        r,_ = self.reward_function(self.params_base)
-        print("reward received: {}".format(r))
-        return r
 
     def train(self, num_steps, name):
         # store the start time
