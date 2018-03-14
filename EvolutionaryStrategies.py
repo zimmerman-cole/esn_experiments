@@ -511,7 +511,7 @@ class Agent(object):
             echo_params = params[:self.base_esn.num_reservoirs]
             spec_params = params[self.base_esn.num_reservoirs:self.base_esn.num_reservoirs*2]
             weightin_params = params[self.base_esn.num_reservoirs*2:]
-            esn = EESN(input_size=self.base_esn.getInputSize(), output_size=self.base_esn.getOutputSize(), num_reservoirs=self.base_esn.num_reservoirs,
+            esn = EESN(input_size=self.base_esn.input_size, output_size=self.base_esn.output_size, num_reservoirs=self.base_esn.num_reservoirs,
                         reservoir_sizes=self.base_esn.reservoir_sizes, echo_params=echo_params, #self.base_esn.output_activation,
                         init_echo_timesteps=self.base_esn.init_echo_timesteps, regulariser=self.base_esn.regulariser, debug=self.base_esn.debug)
             esn.initialize_input_weights(scales=weightin_params.tolist())
@@ -529,7 +529,7 @@ class Agent(object):
             echo_params = params[0]
             spec_params = params[1]
             weightin_params = params[2]
-            esn = ESN(input_size=self.base_esn.getInputSize(), output_size=self.base_esn.getOutputSize(),
+            esn = ESN(input_size=self.base_esn.input_size, output_size=self.base_esn.output_size,
                         reservoir_size=self.base_esn.N, echo_param=echo_params, #self.base_esn.output_activation,
                         init_echo_timesteps=self.base_esn.init_echo_timesteps, regulariser=self.base_esn.regulariser, debug=self.base_esn.debug)
             esn.initialize_input_weights(scale=weightin_params)

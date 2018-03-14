@@ -297,28 +297,61 @@ class LayeredESN(object):
 
 
 class ESN(LayeredESN):
+    """
+    Sub-class of LayeredESN, but this one still allowed to take non-plural argument names, 
+        e.g. 'echo_param' instead of 'echo_params', etc.
+    """
 
-    def __init__(self, input_size, output_size, num_reservoirs=None, reservoir_sizes=None, 
+    def __init__(self, input_size, output_size, reservoir_sizes=None, 
                  echo_params=None, output_activation=None, init_echo_timesteps=100, 
-                 regulariser=1e-8, activation=np.tanh, debug=False):
+                 regulariser=1e-8, activation=np.tanh, debug=False, **kwargs):
         
-        if num_reservoirs is not None:
-            warnings.warn('Passing num_reservoirs argument to basic ESN.')
-        
-        super(ESN, LayeredESN).__init__(
+        # Messy code allowing ESN init arguments to have multiple names ==========
+        if 'num_reservoirs' in kwargs.keys():
+            warnings.warn('"num_reservoirs" argument passed to basic ESN. Ignoring.')
+        reservoir_sizes = self._handle_arg('reservoir_size', reservoir_sizes, 1000, kwargs)
+        echo_params = self._handle_arg('echo_param', echo_params, 0.85, kwargs)
+        # ========================================================================
+
+        super(ESN, self).__init__(
             input_size, output_size, num_reservoirs=1, reservoir_sizes=reservoir_sizes,
             echo_params=echo_params, output_activation=output_activation, 
             init_echo_timesteps=init_echo_timesteps, regulariser=regulariser,
             activation=activation, debug=debug
         )
 
+    def initialize_input_weights(self, strategies='binary', scales=1e-2, offsets=0.5, **kwargs):
+        strategies = self._handle_arg('strategy', strategies, 'binary', kwargs)
+        scales = self._handle_arg('scale', scales, 1e-2, kwargs)
+        offsets = self._handle_arg('offset', offsets, 0.5, kwargs)
+        super(ESN, self).initialize_input_weights(strategies, scales, offsets)
+
+    def initialize_reservoir_weights(self, strategies='uniform', spectral_scales=1.0, offsets=0.5, sparsity=1.0, **kwargs):
+        strategies = self._handle_arg('strategy', strategies, 'uniform', kwargs)
+        scales = self._handle_arg('spectral_scale', spectral_scales, 1.0, kwargs)
+        offsets = self._handle_arg('offset', offsets, 0.5, kwargs)
+        super(ESN, self).initialize_reservoir_weights(strategies, scales, offsets, sparsity)
+
+    def _handle_arg(self, arg_name, arg_plural, default, kwargs):
+        out = None
+        if arg_name in kwargs.keys():
+            out = kwargs[arg_name]
+        elif arg_plural is not None:
+            out = arg_plural
+        else:
+            out = default
+
+        assert type(out) not in [list, np.ndarray] or len(out) == 1, "Basic ESN received multiple %s args." % arg_name
+        return out
+
     def __forward_routing_rule__(self, u_n):
         return self.reservoirs[0].forward(u_n)
     
-    def __reservoir_input_size_rule__(self):
+    def __reservoir_input_size_rule__(self, reservoir_sizes, echo_params, activation):
         self.reservoirs.append(
-            Reservoir(self.K, self.N, self.echo_params[0], idx=0, debug=self.debug)
+            Reservoir(self.K, reservoir_sizes[0], echo_params[0], idx=0, activation=activation, debug=self.debug)
         )
+
     
 class DHESN(LayeredESN):
     """
@@ -468,7 +501,7 @@ class DHESN(LayeredESN):
         D = y[self.init_echo_timesteps*self.num_reservoirs:]
         # Solve linear system
         T1 = np.dot(D.T, S)
-        T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye(self.num_predictor_variables)
+        T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye(self.num_predictor_variables))
         self.W_out = np.dot(T1, T2)
         
     @property
@@ -479,17 +512,17 @@ class DHESN(LayeredESN):
 class LCESN(LayeredESN):
     """ Layered constrained ESN (name probably needs a change). """
     
-    def __reservoir_input_size_rule__(self, reservoir_sizes, echo_params):
+    def __reservoir_input_size_rule__(self, reservoir_sizes, echo_params, activation):
         """
         Set up the reservoirs so that the first takes the input signal as input,
           and the rest take the previous reservoir's state as input.
         """
         self.reservoirs.append(Reservoir(self.K, reservoir_sizes[0], echo_params[0],
-                                         idx=0, debug=self.debug))
+                                         idx=0, activation=activation, debug=self.debug))
         for i, (size, echo_prm) in enumerate(zip(reservoir_sizes, echo_params)[1:]):
             self.reservoirs.append(Reservoir(
                 input_size=self.reservoirs[i-1].N, num_units=size, echo_param=echo_prm,
-                idx=i+1, debug=self.debug
+                idx=i+1, activation=activation, debug=self.debug
             ))
 
     def __forward_routing_rule__(self, u_n):
