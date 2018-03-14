@@ -83,7 +83,8 @@ class Reservoir(object):
         self.W_in *= self.input_weights_scale
         self.ins_init = True
 
-    def initialize_reservoir_weights(self, strategy='uniform', spectral_scale=1.0, offset=0.5, sparsity=1.0):
+    def initialize_reservoir_weights(self, strategy='uniform', spectral_scale=1.0, offset=0.5, 
+                                     sparsity=1.0):
         self.spectral_scale = spectral_scale
         self.W_res_init_strategy = strategy
         if strategy == 'binary':
@@ -156,7 +157,8 @@ class ESN(object):
     def initialize_input_weights(self, strategy='binary', scale=1e-2):
         self.reservoir.initialize_input_weights(strategy, scale)
 
-    def initialize_reservoir_weights(self, strategy='uniform', spectral_scale=1.0, offset=0.5, sparsity=1.0):
+    def initialize_reservoir_weights(self, strategy='uniform', spectral_scale=1.0, offset=0.5, 
+                                     sparsity=1.0):
         self.reservoir.initialize_reservoir_weights(strategy, spectral_scale, offset, sparsity)
 
     def forward(self, u_n):
@@ -501,9 +503,13 @@ class DHESN(LayeredESN):
         T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye((len(self.reservoirs)-1)*self.dim_reduce+self.K+self.reservoirs[-1].N))
         self.W_out = np.dot(T1, T2)
 
-    def getInputSize(self): return self.K
-
-    def getOutputSize(self): return self.L
+    @property
+    def input_size(self):
+        return self.K
+    
+    @property
+    def output_size(self):
+        return self.L
 
 
 class LCESN(LayeredESN):
