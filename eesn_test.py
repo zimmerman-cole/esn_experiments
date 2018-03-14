@@ -17,9 +17,9 @@ import datetime
 if __name__ == '__main__':
     data = np.  array([run(21100)]).reshape(-1, 1)
     # NOTE: REMOVE WHEN NOT DHESN
-    # _std = np.std(data)
-    # data -= np.mean(data)
-    # data /= _std
+    #_std = np.std(data)
+    #data -= np.mean(data)
+    #data /= _std
     MEAN_OF_DATA = np.mean(data)
     split = 20100
     X_train = data[:split-1]
