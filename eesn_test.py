@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from ESN import ESN
+from ESN import ESN, DHESN
 from time_series_data.MackeyGlassGenerator import run
 
 from utils import nrmse

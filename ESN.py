@@ -366,9 +366,6 @@ class DHESN(LayeredESN):
             self.dim_reduce = kwargs['dim_reduce']
             del kwargs['dim_reduce']
             
-        if type(self.dim_reduce) not in [list, np.ndarray]:
-            self.dim_reduce = [self.dim_reduce]*(len(self.reservoirs) - 1)
-        
         # ==================================================================
         # Encoder type [PCA, AE, ELM, ...] =================================
         if 'encoder_type' not in kwargs.keys():
@@ -385,10 +382,10 @@ class DHESN(LayeredESN):
         if self.encoder_type == 'PCA':
             for j in range(self.num_reservoirs-1):
                 # self.encoders.append(PCA(n_components=self.reservoirs[j-1].N))
-                self.encoders.append(PCA(n_components=self.dim_reduce[j]))
+                self.encoders.append(PCA(n_components=self.dim_reduce))
         elif self.encoder_type == 'VAE':
             for j in range(self.num_reservoirs-1):
-                self.encoders.append(VAE(input_size=self.reservoir_sizes[j-1], hidden_size=150, latent_variable_size=self.dim_reduce[j],
+                self.encoders.append(VAE(input_size=self.reservoir_sizes[j-1], hidden_size=150, latent_variable_size=self.dim_reduce,
                                             epochs=10, batch_size=32))
         else:
             raise NotImplementedError('non-PCA/VAE encodings not done yet')
