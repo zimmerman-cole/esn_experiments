@@ -79,7 +79,8 @@ class Reservoir(object):
         self.W_in *= self.input_weights_scale
         self.ins_init = True
 
-    def initialize_reservoir_weights(self, strategy='uniform', spectral_scale=1.0, offset=0.5, sparsity=1.0):
+    def initialize_reservoir_weights(self, strategy='uniform', spectral_scale=1.0, offset=0.5, 
+                                     sparsity=1.0):
         self.spectral_scale = spectral_scale
         self.W_res_init_strategy = strategy
         if strategy == 'binary':
@@ -152,7 +153,8 @@ class ESN(object):
     def initialize_input_weights(self, strategy='binary', scale=1e-2):
         self.reservoir.initialize_input_weights(strategy, scale)
 
-    def initialize_reservoir_weights(self, strategy='uniform', spectral_scale=1.0, offset=0.5, sparsity=1.0):
+    def initialize_reservoir_weights(self, strategy='uniform', spectral_scale=1.0, offset=0.5, 
+                                     sparsity=1.0):
         self.reservoir.initialize_reservoir_weights(strategy, spectral_scale, offset, sparsity)
 
     def forward(self, u_n):
@@ -424,14 +426,15 @@ class DHESN(LayeredESN):
         delim = np.array([0]+[self.dim_reduce]*(len(self.reservoirs)-1)+[self.reservoirs[-1].N])
         for i in range(1, len(delim)):
             delim[i] += delim[i-1]
-            
+        
+        init_echo_inputs = X[:self.init_echo_timesteps, :]
         inputs = X[self.init_echo_timesteps:, :]
         # Now send data into each reservoir one at a time,
         #   and train each encoder one at a time
         for i in range(self.num_reservoirs):
             reservoir = self.reservoirs[i]
             # burn-in period (init echo timesteps) ===============================================
-            for u_n in inputs:
+            for u_n in init_echo_inputs:
                 _ = reservoir.forward(u_n)
             # ==================
 
@@ -448,6 +451,8 @@ class DHESN(LayeredESN):
                 # Now train the encoder using the gathered state data
                 encoder.fit(S_i)
                 S_i = encoder.transform(S_i)
+                
+                init_echo_inputs = encoder.transform(init_echo_inputs)
 
             print(np.shape(S_i))
             print(np.shape(S))
@@ -466,9 +471,13 @@ class DHESN(LayeredESN):
         T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye((len(self.reservoirs)-1)*self.dim_reduce+self.K+self.reservoirs[-1].N))
         self.W_out = np.dot(T1, T2)
 
-    def getInputSize(self): return self.K
-
-    def getOutputSize(self): return self.L
+    @property
+    def input_size(self):
+        return self.K
+    
+    @property
+    def output_size(self):
+        return self.L
 
 
 class LCESN(LayeredESN):
