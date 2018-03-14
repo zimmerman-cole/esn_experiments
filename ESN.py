@@ -375,6 +375,11 @@ class DHESN(LayeredESN):
             del kwargs['encoder_type']
         
         super(DHESN, self).__init__(*args, **kwargs)
+
+        self.data_mean = None      # mean of training data input signal
+        self.reservoir_means = [
+                np.zeros(N_i) for N_i in self.reservoir_sizes[:-1]
+        ]   # <- ^ mean of each reservoir's (except last's) states (over training)
         
         # ==================================================================
         # Initialize encoders ==============================================
@@ -406,11 +411,12 @@ class DHESN(LayeredESN):
 
     def __forward_routing_rule__(self, u_n):
         x_n = np.zeros(0)
+        u_n = (u_n.reshape(-1, self.K) - self.data_mean).squeeze()
 
-        for reservoir, encoder in zip(self.reservoirs, self.encoders):
+        for i, (reservoir, encoder) in enumerate(zip(self.reservoirs, self.encoders)):
             u_n = reservoir.forward(u_n)
-            #u_n -= np.mean(u_n)
             if self.encoder_type == 'PCA':
+                u_n -= self.reservoir_means[i] 
                 u_n = encoder.transform(u_n.reshape(1, -1)).squeeze()
             elif self.encoder_type == 'VAE':
                 u_n = encoder.encode(Variable(th.FloatTensor(u_n)))[0].data.numpy()
@@ -433,7 +439,9 @@ class DHESN(LayeredESN):
         assert X.shape[1] == self.K, "Training data has unexpected dimensionality (%s). K = %d." % (X.shape, self.K)
         X = X.reshape(-1, self.K)
         y = y.reshape(-1, self.L)
-        assert self.encoder_type != 'PCA' or np.mean(X) < 1e-3, "Input data must be zero-mean to use PCA encoding."
+
+        self.data_mean = np.mean(X, axis=0)
+        X -= self.data_mean
 
         T = len(X) - self.init_echo_timesteps*self.num_reservoirs
         # S = np.zeros((T, self.N+self.K))
@@ -457,8 +465,8 @@ class DHESN(LayeredESN):
                 _ = reservoir.forward(u_n)
             # ===========================================================================
 
-            N_i = reservoir.N         # number of units in reservoir i
-            S_i = np.zeros((T, N_i))  # reservoir i's states over T timesteps
+            N_i = reservoir.N                   # number of units in reservoir i
+            S_i = np.zeros((len(inputs), N_i))  # reservoir i's states over T timesteps
 
             # Now collect the real state data for encoder to train on ===================
             for n, u_n in enumerate(inputs):
@@ -467,14 +475,14 @@ class DHESN(LayeredESN):
             # All reservoirs except the last output into an autoencoder =================
             if i != self.num_reservoirs - 1:
                 encoder = self.encoders[i]
+                reservoir_mean = np.mean(S_i, axis=0)      # zero-mean each reservoir's
+                self.reservoir_means[i] = reservoir_mean   # states
+                S_i -= reservoir_mean
                 # Now train the encoder using the gathered state data
                 if self.encoder_type == 'PCA':
-                    S_i -= np.mean(S_i)
                     encoder.fit(S_i)
                     S_i = encoder.transform(S_i)
                 elif self.encoder_type == 'VAE':
-                    # encoder.train_full(Variable(th.FloatTensor(S_i)))
-                    # S_i = encode.encode(S_i).data().numpy()
                     encoder.train_full(th.FloatTensor(S_i))
                     S_i = encoder.encode(Variable(th.FloatTensor(S_i)))[0].data.numpy()
 
@@ -493,7 +501,7 @@ class DHESN(LayeredESN):
             S[:, lb:ub] = S_i[(self.init_echo_timesteps*(self.num_reservoirs-i-1)):, :]
             
             if self.debug:
-                print('Mean state magnitude of res. %d: %.4f' % (i, np.mean(np.abs(S_i))))
+                print('Mean encoded state magnitude of res. %d: %.4f' % (i, np.mean(np.abs(S_i))))
 
         D = y[self.init_echo_timesteps*self.num_reservoirs:]
         # Solve linear system
