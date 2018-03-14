@@ -1,9 +1,10 @@
 import time
 import numpy as np
 import matplotlib.pyplot as plt
-from ESN.ESN import ESN2
-from ESN.ESN import ESN, LCESN, EESN
-from MackeyGlass.MackeyGlassGenerator import run, onExit
+from ESN import ESN2
+from ESN import ESN, LCESN, EESN
+from time_series_data.MackeyGlassGenerator import run
+
 
 def run_TESTS():
     data = np.array(run(21100)).reshape(-1, 1)

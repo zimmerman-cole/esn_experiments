@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from ESN.ESN import LCESN, ESN
-from MackeyGlass.MackeyGlassGenerator import run
+from ESN import LCESN, ESN
+from time_series_data.MackeyGlassGenerator import run
 
 
 def mse(y1, y2):

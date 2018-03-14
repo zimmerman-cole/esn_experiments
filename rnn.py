@@ -13,7 +13,7 @@ from copy import deepcopy
 
 class LSTM(nn.Module):
     """
-     input_size: Data dimensionality (i.e. MackeyGlass: 1).
+     input_size: Data dimensionality (i.e. time_series_data: 1).
     hidden_size: Number of features in each hidden state, h.
        n_layers: Number of recurrent layers.
     """
@@ -66,7 +66,7 @@ def nrmse(y_pred, y_target, DATA_MEAN):
 
 # if __name__ == '__main__':
 
-#     from MackeyGlass.MackeyGlassGenerator import run
+#     from time_series_data.MackeyGlassGenerator import run
 #     data = run(21000)
 #     data -= np.mean(data)
 #     DATA_MEAN = np.mean(data)
@@ -283,7 +283,7 @@ def load_and_run_model(file_name):
     (seq, gen_train_loss, gen_test_loss, epoch) = model
     print("MODEL LOADED")
 
-    from MackeyGlass.MackeyGlassGenerator import run
+    from time_series_data.MackeyGlassGenerator import run
     data = run(21000)
     data -= np.mean(data)
     DATA_MEAN = np.mean(data)
@@ -316,7 +316,7 @@ def load_and_run_model(file_name):
     plt.show()
 
 def try_toy_example():
-    from MackeyGlass.MackeyGlassGenerator import run
+    from time_series_data.MackeyGlassGenerator import run
     data = run(20000)
     data -= np.mean(data)
     DATA_MEAN = np.mean(data)

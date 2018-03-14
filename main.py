@@ -1,5 +1,5 @@
-from ESN.ESN import ESN2 as ESN
-from MackeyGlass.MackeyGlassGenerator import run, onExit
+from ESN import ESN2 as ESN
+from time_series_data.MackeyGlassGenerator import run
 
 import numpy as np
 import matplotlib.pyplot as plt
