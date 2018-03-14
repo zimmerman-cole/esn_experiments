@@ -66,7 +66,7 @@ class LivePlotHistogram:
         self.hists = []
         for i in self.data_functions:
             y_data = i()
-            print(y_data)
+            # print(y_data)
             h, bars = np.histogram(y_data, bins=self.barCount)
             c = (bars[1:] + bars[:-1]) / 2.0
             w = (bars[0] - bars[1]) * 0.8
@@ -79,7 +79,7 @@ class LivePlotHistogram:
             self.__update__()
             # idx = 0
             for idx, (h,c,w) in enumerate(zip(self.hists, self.centres, self.widths)):
-                print(idx)
+                # print(idx)
                 self.axs[idx].clear()
                 self.axs[idx].bar(c, h, width=w)
                 self.axs[idx].set_title(self.names[idx])

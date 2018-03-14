@@ -24,9 +24,9 @@ if __name__ == '__main__':
     X_valid = data[split-1:-1]
     y_valid = data[split:]
 
-    eesn = ESN(1, 1, 1000, echo_param=0.72219587, regulariser=1e-6)
-    eesn.initialize_input_weights(scale=0.74768232)
-    eesn.initialize_reservoir_weights(spectral_scale=0.07459305)
+    eesn = ESN(1, 1, 1000, echo_param=0.76800719, regulariser=1e-5)
+    eesn.initialize_input_weights(scale=1.00567055)
+    eesn.initialize_reservoir_weights(spectral_scale=1.19223381)
     # eesn = ESN(1, 1, 1000, echo_param=0.85, regulariser=1e-6)
     # eesn.initialize_input_weights(scale=1.0)
     # eesn.initialize_reservoir_weights(spectral_scale=1.25)

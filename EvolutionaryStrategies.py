@@ -14,8 +14,9 @@ class GeneticAlgorithm(object):
 
     def __init__(self, reward_function, num_params, params_base=None, num_resamples=1,
                 population=20, mutation_prob=0.1, mutation_scale=0.1, 
-                selection_strategy='ranked', # roulette, ranked
-                generation_update_strategy='elitismWR', # elitismWR (With Replacement), elitism, reset
+                selection_strategy='roulette', # roulette, ranked
+                generation_update_strategy='reset', # elitismWR (With Replacement), elitism, reset
+                crossover_rule='two-parent', # two-parent, single-parent
                 verbose=False, seed=None):
         '''
         reward_function:    objective function to MAXIMISE
@@ -32,7 +33,8 @@ class GeneticAlgorithm(object):
 
         self.num_resamples = num_resamples
         self.population = population * self.num_resamples     # number of individuals in one population
-        self.individuals = np.random.rand(self.population, self.num_params) # the population, itself
+        self.individuals = np.clip(np.random.randn(self.population, self.num_params)*0.1 +
+        np.array([0.85, 1.25, 1.0]), 0, 1.5) # the population, itself
         self.individuals_fitness = np.zeros(self.population)  # the fitness of each member of the population
 
         self.culm_mean_reward = None
@@ -44,6 +46,7 @@ class GeneticAlgorithm(object):
         self.mutation_scale = mutation_scale
         self.selection_strategy = selection_strategy
         self.generation_update_strategy = generation_update_strategy
+        self.crossover_rule = crossover_rule
 
         self.verbose = verbose
         self.base_run_rate = 1 
@@ -112,20 +115,27 @@ class GeneticAlgorithm(object):
             print('selection probs: {}'.format(pop_probs))
 
         for k in range(0, self.population, self.num_resamples):
-            # if self.selection_strategy == 'roulette':
-            # sample an individual using the roulette strategy
-            p1 = np.argwhere(pop_probs > np.random.rand())[0][0]  # first parent
-            p2 = np.argwhere(pop_probs > np.random.rand())[0][0]  # second parent
+            if self.crossover_rule == 'two-parent':
+                # sample an individual using the roulette strategy
+                p1 = np.argwhere(pop_probs > np.random.rand())[0][0]  # first parent
+                p2 = np.argwhere(pop_probs > np.random.rand())[0][0]  # second parent
 
-            # cross-over =========================================
-            # using single-point technique
-            c = int(np.random.rand() * self.num_params)   # crossover point is chosen u.a.r. from [0, num_params-1]
-            p = np.zeros(self.num_params)                 # child chromosome
-            p[:c] = self.individuals[p1, :c]              # ^
-            p[c:] = self.individuals[p2, c:]              # ^
+                # cross-over =========================================
+                # using single-point technique
+                c = int(np.random.rand() * self.num_params)   # crossover point is chosen u.a.r. from [0, num_params-1]
+                p = np.zeros(self.num_params)                 # child chromosome
+                p[:c] = self.individuals[p1, :c]              # ^
+                p[c:] = self.individuals[p2, c:]              # ^
 
-            if self.verbose:
-                print('crossover--> p1: {}, p2: {} at {} = {}'.format(p1, p2, c, p))
+                if self.verbose:
+                    print('two-p crossover--> p1: {}, p2: {} at {} = {}'.format(p1, p2, c, p))
+            elif self.crossover_rule == 'single-parent':
+                p1 = np.argwhere(pop_probs > np.random.rand())[0][0]
+                # child is a small perturbation of the parent
+                p = p1 + np.random.randn(self.num_params)*0.01
+
+                if self.verbose:
+                    print('single-p crossover--> p1: {} = {}'.format(p1, p))
 
             # mutation ===========================================
             # each gene/nucleotide has a small probability of mutating with some Gaussian white noise
@@ -575,34 +585,37 @@ class Agent(object):
 
             y_pred = np.array(y_pred).squeeze()
             y_vals = self.data_val[1].squeeze()
-            errors[run_num] = nrmse(y_vals, y_pred, self.MEAN_OF_DATA)
+            nr = nrmse(y_vals, y_pred, self.MEAN_OF_DATA)
+            if nr > 1000000000: nr = 1000000000
+            errors[run_num] = nr
 
+        return -np.mean(np.log(errors))
         # Calculate reward =============================
-        failures = errors[np.where(errors >= 1.)[0]]
-        num_failures = len(failures)
-        failure_rate = float(num_failures) / num_runs
+        # failures = errors[np.where(errors >= 1.)[0]]
+        # num_failures = len(failures)
+        # failure_rate = float(num_failures) / num_runs
 
-        if num_failures != num_runs:
-            sucs = errors[np.where(errors < 1.)[0]]
-            nrmse_suc = np.mean(sucs)
-        else:
-            nrmse_suc = 1.0
+        # if num_failures != num_runs:
+        #     sucs = errors[np.where(errors < 1.)[0]]
+        #     nrmse_suc = np.mean(sucs)
+        # else:
+        #     nrmse_suc = 1.0
 
-        if num_failures != 0:
-            nrmse_fail = np.mean(failures)
-            nrmse_fail_saturated = []
-            for l in [1, 0.01, 0.001, 0.0001]:
-                sat_err = 1. / (1. + np.exp(-l*nrmse_fail))
-                sat_err = (sat_err - 0.5) * 2.
-                nrmse_fail_saturated.append(sat_err)
-            nrmse_fail_saturated = np.mean(nrmse_fail_saturated)
-        else:
-            nrmse_fail_saturated = 0.
+        # if num_failures != 0:
+        #     nrmse_fail = np.mean(failures)
+        #     nrmse_fail_saturated = []
+        #     for l in [1, 0.01, 0.001, 0.0001]:
+        #         sat_err = 1. / (1. + np.exp(-l*nrmse_fail))
+        #         sat_err = (sat_err - 0.5) * 2.
+        #         nrmse_fail_saturated.append(sat_err)
+        #     nrmse_fail_saturated = np.mean(nrmse_fail_saturated)
+        # else:
+        #     nrmse_fail_saturated = 0.
         
-        # failure_rate, nrmse_success, nrmse_fail_saturated
-        out = (1. - failure_rate) * nrmse_suc 
-        out += failure_rate * nrmse_fail_saturated
-        return -out
+        # # failure_rate, nrmse_success, nrmse_fail_saturated
+        # out = (1. - failure_rate) * nrmse_suc 
+        # out += failure_rate * nrmse_fail_saturated
+        # return -out
         #return -np.mean([failure_rate, 1.1*nrmse_suc, nrmse_fail_saturated])
 
 

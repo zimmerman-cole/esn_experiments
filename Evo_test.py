@@ -9,9 +9,9 @@ from EvolutionaryStrategies import RunES, RunGA
 import datetime
 
 if __name__ == '__main__':
-    data = np.array([run(11100)]).reshape(-1, 1)
+    data = np.array([run(6100)]).reshape(-1, 1)
     MEAN_OF_DATA = np.mean(data)
-    split = 10100
+    split = 5100
     X_train = data[:split-1]
     y_train = data[1:split]
     X_valid = data[split-1:-1]
@@ -29,7 +29,7 @@ if __name__ == '__main__':
     #=================================
     episodes = 1000
     name = "ESN_1000_RES_"
-    population = 30
+    population = 15
     std = 0.01
     learn_rate = 0.001
     base_esn = ESN(input_size=1, output_size=1, reservoir_size=1000, regulariser=1e-5)
