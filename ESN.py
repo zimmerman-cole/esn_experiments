@@ -412,7 +412,7 @@ class DHESN(LayeredESN):
 
         for reservoir, encoder in zip(self.reservoirs, self.encoders):
             u_n = reservoir.forward(u_n)
-            u_n -= np.mean(u_n)
+            #u_n -= np.mean(u_n)
             if self.encoder_type == 'PCA':
                 u_n = encoder.transform(u_n.reshape(1, -1)).squeeze()
             elif self.encoder_type == 'VAE':
@@ -438,6 +438,7 @@ class DHESN(LayeredESN):
         y = y.reshape(-1, self.L)
         assert self.encoder_type != 'PCA' or np.mean(X) < 1e-3, "Input data must be zero-mean to use PCA encoding."
 
+<<<<<<< HEAD
         T = len(X) - self.init_echo_timesteps*self.num_reservoirs
         # S = np.zeros((T, self.N+self.K))
         # S = np.zeros((T, 5))
@@ -457,6 +458,26 @@ class DHESN(LayeredESN):
             reservoir = self.reservoirs[i]
             # burn-in period (init echo timesteps) ===============================================
             for u_n in burn_in:
+=======
+        T = len(X) - self.init_echo_timesteps
+        S = np.zeros((T, self.num_predictor_variables))
+        # S: collection of extended system states (encoder outputs plus inputs at each time-step t
+        S[:, -self.K:] = X[self.init_echo_timesteps:]
+        delim = np.array([0]+self.dim_reduce+[self.reservoirs[-1].N])
+        for i in range(1, len(delim)):
+            delim[i] += delim[i-1]
+        
+        # ========================================================================================
+        n_init_echo_steps_total = self.num_reservoirs * self.init_echo_timesteps
+        init_echo_inputs = X[:self.init_echo_timesteps, :]
+        inputs = X[n_init_echo_steps_total:, :]
+        
+        # Now send data into each reservoir one at a time, and train each encoder one at a time.
+        for i in range(self.num_reservoirs):
+            reservoir = self.reservoirs[i]
+            # burn-in period (init echo timesteps) ======================================
+            for u_n in init_echo_inputs:
+>>>>>>> a8bb1249eb10b37c8462d639f1f60ddbb5f358a2
                 _ = reservoir.forward(u_n)
             # ===========================================================================
 
@@ -471,6 +492,7 @@ class DHESN(LayeredESN):
             if i != self.num_reservoirs - 1:
                 encoder = self.encoders[i]
                 # Now train the encoder using the gathered state data
+<<<<<<< HEAD
                 if self.encoder_type == 'PCA':
                     S_i -= np.mean(S_i)
                     encoder.fit(S_i)
@@ -494,14 +516,37 @@ class DHESN(LayeredESN):
             # Slot the state data into its corresponding spot in the full state matrix ==
             lb, ub = delim[i], delim[i+1]
             S[:, lb:ub] = S_i[(self.init_echo_timesteps*(self.num_reservoirs-i-1)):, :]
+=======
+                encoder.fit(S_i)
+                S_i = encoder.transform(S_i)
+                
+                init_echo_inputs = encoder.transform(init_echo_inputs)
+            
+            # Slot the state data into its corresponding spot in the full state matrix ==
+            lb, ub = delim[i], delim[i+1]
+            S[:, lb:ub] = S_i
+
+            inputs = S_i
+>>>>>>> a8bb1249eb10b37c8462d639f1f60ddbb5f358a2
             
             if self.debug:
                 print('Mean state magnitude of res. %d: %.4f' % (i, np.mean(np.abs(S_i))))
 
+<<<<<<< HEAD
         D = y[self.init_echo_timesteps*self.num_reservoirs:]
         # Solve linear system
         T1 = np.dot(D.T, S)
         T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye(self.num_predictor_variables))
+=======
+        if self.debug:
+            print('%d timesteps of training data used to warm up the DHESN reservoirs.' % n_init_echo_steps_total)
+            print('%d timesteps of training data used to actually train.' % T)
+            
+        D = y[n_init_echo_steps_total:]  # teacher signals
+        # Solve linear system
+        T1 = np.dot(D.T, S)
+        T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye(self.num_predictor_variables)
+>>>>>>> a8bb1249eb10b37c8462d639f1f60ddbb5f358a2
         self.W_out = np.dot(T1, T2)
         
     @property
@@ -512,17 +557,29 @@ class DHESN(LayeredESN):
 class LCESN(LayeredESN):
     """ Layered constrained ESN (name probably needs a change). """
     
+<<<<<<< HEAD
     def __reservoir_input_size_rule__(self, reservoir_sizes, echo_params, activation):
+=======
+    def __reservoir_input_size_rule__(self, reservoir_sizes, echo_params):
+>>>>>>> a8bb1249eb10b37c8462d639f1f60ddbb5f358a2
         """
         Set up the reservoirs so that the first takes the input signal as input,
           and the rest take the previous reservoir's state as input.
         """
         self.reservoirs.append(Reservoir(self.K, reservoir_sizes[0], echo_params[0],
+<<<<<<< HEAD
                                          idx=0, activation=activation, debug=self.debug))
         for i, (size, echo_prm) in enumerate(zip(reservoir_sizes, echo_params)[1:]):
             self.reservoirs.append(Reservoir(
                 input_size=self.reservoirs[i-1].N, num_units=size, echo_param=echo_prm,
                 idx=i+1, activation=activation, debug=self.debug
+=======
+                                         idx=0, debug=self.debug))
+        for i, (size, echo_prm) in enumerate(zip(reservoir_sizes, echo_params)[1:]):
+            self.reservoirs.append(Reservoir(
+                input_size=self.reservoirs[i-1].N, num_units=size, echo_param=echo_prm,
+                idx=i+1, debug=self.debug
+>>>>>>> a8bb1249eb10b37c8462d639f1f60ddbb5f358a2
             ))
 
     def __forward_routing_rule__(self, u_n):
