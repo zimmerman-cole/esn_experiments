@@ -154,6 +154,9 @@ class VAE(nn.Module):
         # _mean = train_data.mean()
         # _std = train_data.std()
         # train_data -= _mean
+        # train_data /= _std.mean()
+        # _std = train_data.std()
+        # train_data -= _mean
         # train_data /= _std
 
         for epoch in range(1, self.epochs + 1):
