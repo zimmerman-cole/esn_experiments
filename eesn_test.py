@@ -17,15 +17,18 @@ import datetime
 if __name__ == '__main__':
     data = np.  array([run(21100)]).reshape(-1, 1)
     # NOTE: REMOVE WHEN NOT DHESN
-    #_std = np.std(data)
-    #data -= np.mean(data)
-    #data /= _std
+    _std = np.std(data)
+    data -= np.mean(data)
+    # data /= _std
     MEAN_OF_DATA = np.mean(data)
     split = 20100
-    X_train = data[:split-1]
-    y_train = data[1:split]
-    X_valid = data[split-1:-1]
-    y_valid = data[split:]
+    X_train = np.array(data[:split-1])
+    y_train = np.array(data[1:split])
+    X_valid = np.array(data[split-1:-1])
+    y_valid = np.array(data[split:])
+
+    # print(np.mean(X_train))
+    # print(np.mean(X_valid))
 
     # eesn = ESN(1, 1, 1000, echo_param=0.76800719, regulariser=1e-5)
     # eesn.initialize_input_weights(scale=1.00567055)
@@ -67,13 +70,13 @@ if __name__ == '__main__':
     # print('EESN NRMSE: %f' % nrmse_err)
 
 
-    res_ranges = [(300, 300)]
-    echo_ranges = [(0.4, 0.4), (0.3, 0.6), (0.6, 0.1)]
-    weightin_ranges = [(0.2, 1.0)]
-    spect_ranges = [(1.25, 0.8), (1.25, 1.25)]
+    res_ranges = [(200, 10)]
+    echo_ranges = [(0.6, 0.1)]
+    weightin_ranges = [(0.6, 0.2)]
+    spect_ranges = [(1.0, 1.3)]
     res_number_ranges = [8]
     # num_res = 20
-    reg = 1e-5
+    reg = 1e-6
 
     num_samples = 20
 
@@ -91,11 +94,12 @@ if __name__ == '__main__':
                         _echoes = np.round(np.linspace(e[0], e[1], n, endpoint=True), 3)
                         _spectrals = np.round(np.linspace(s[0], s[1], n, endpoint=True), 3).tolist()
                         _weightins = np.round(np.linspace(w[0], w[1], n, endpoint=True), 3).tolist()
-                        _echoes = np.array([0.2618, 0.6311, 0.2868, 0.6311, 0.2868, 0.6311, 0.2868, 0.6311])
-                        _spectrals = np.array([0.8896, 0.8948, 0.3782, 0.8948, 0.3782, 0.8948, 0.3782, 0.8948])
-                        _weightins = np.array([0.7726, 0.4788, 0.6535, 0.4788, 0.6535, 0.4788, 0.6535, 0.4788])
+                        # _echoes = np.array([0.2618, 0.6311, 0.2868, 0.6311, 0.2868, 0.6311, 0.2868, 0.6311])
+                        # _spectrals = np.array([0.8896, 0.8948, 0.3782, 0.8948, 0.3782, 0.8948, 0.3782, 0.8948])
+                        # _weightins = np.array([0.7726, 0.4788, 0.6535, 0.4788, 0.6535, 0.4788, 0.6535, 0.4788])
                         # _echoes = np.array([0.4, 0.4, 0.4, 0.4, 0.4])
                         # _weightins = [0.2, 1.0, 1.0, 1.0, 1.0]
+                        # print(range(10, 100, n-1)[::-1])
                         print("EXPERIMENT: \n\tRES: {}, \n\tECH: {}, \n\tSPEC: {}, \n\tWEIGHTIN: {}".format(_reservoirs, _echoes, _spectrals, _weightins))
                         eesn = DHESN(1, 1, n,
                                     reservoir_sizes=_reservoirs, 
@@ -103,8 +107,8 @@ if __name__ == '__main__':
                                     regulariser=reg, debug=True,
                                     # activation=(lambda x: x*(x>0).astype(float)),
                                     # activation=(lambda x: x),
-                                    init_echo_timesteps=100, dim_reduce=100,
-                                    encoder_type='PCA')
+                                    init_echo_timesteps=100, dims_reduce=(np.linspace(50, 200, n-1).astype(int).tolist()),
+                                    encoder_type='VAE')
                         eesn.initialize_input_weights(scales=_weightins, strategies='uniform')
                         eesn.initialize_reservoir_weights(
                                     spectral_scales=_spectrals,
@@ -151,6 +155,43 @@ if __name__ == '__main__':
                         data_csv[idx, 7] = reg
                         data_csv[idx, 8] = nrmse_err
                         idx += 1
+    
+    font = {'family' : 'normal',
+        # 'weight' : 'bold',
+        'size'   : 22}
+    plt.rc('font', **font)
+    plt.rc('legend', fontsize=10)
+
+    colors = ['red', 'blue', 'green', 'purple', 'yellow', 'orange', 'black', 'brown']
+    fig1, ax1 = plt.subplots()
+    fig2, ax2 = plt.subplots()
+    for i, e in enumerate(eesn.encoders):
+        s = e.sample()
+        a = e.avg_loss_history
+        # print("sample {}: {}".format(i, s))
+        ax1.plot(range(len(s)), s - i*3, color=colors[i], label='VAE {}'.format(i))
+        ax2.plot(range(len(a)), a, color=colors[i], label='VAE {}'.format(i))
+    ax1.legend()
+    ax1.set_xlabel("sampled unit Guassian")
+    ax1.set_ylabel("latent variables")
+    ax2.legend()
+    ax2.set_xlabel("epoch")
+    ax2.set_ylabel("avg. MSE loss")
+
+    fig3, ax3 = plt.subplots()
+    # hist, bins = np.histogram(eesn.W_out, bins=50)
+    # centres = (bins[1:]+bins[:-1])/2.
+    # width = (bins[1] - bins[0])*0.9
+    print(np.shape(eesn.W_out))
+    ax3.bar(range(len(eesn.W_out.squeeze())), eesn.W_out.squeeze(), width=0.8)
+
+    plt.show()
+
+    # plt.plot(range(len(X_train)), X_train, label="XTRAIN")
+    # plt.plot(range(len(y_train)), y_train, label="yTRAIN")
+    # plt.plot(range(len(X_valid)), X_valid, label="XVALID")
+    # plt.plot(range(len(y_valid)), y_valid, label="yVALID")
+    # plt.show()
 
     # save the data
     file_name = 'DHESN_RESULTS/DHESN_data_{}_{}.csv'.format(EXPERIMENT_NAME, datetime.date.today())

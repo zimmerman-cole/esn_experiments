@@ -365,11 +365,9 @@ class LayeredESN(object):
 class DHESN(LayeredESN):
 
     def __init__(self, *args, **kwargs):
-        if 'dim_reduce' not in kwargs.keys():
-            self.dim_reduce = 100
-        else:
-            self.dim_reduce = kwargs['dim_reduce'] #100
-            del kwargs['dim_reduce']
+        assert 'dims_reduce' in kwargs.keys() or kwargs['dims_reduce'] is list, "MUST UNCLUDE DIMS AS LIST."
+        self.dims_reduce = kwargs['dims_reduce']
+        del kwargs['dims_reduce']
 
         if 'encoder_type' not in kwargs.keys():
             self.encoder_type = 'PCA'
@@ -379,8 +377,12 @@ class DHESN(LayeredESN):
         
         super(DHESN, self).__init__(*args, **kwargs)
         
+        print(self.dims_reduce)
         self.data_mean = None
         self.reservoir_means = [
+            np.zeros(N_i) for N_i in self.reservoir_sizes
+        ]
+        self.reservoir_stds = [
             np.zeros(N_i) for N_i in self.reservoir_sizes
         ]
 
@@ -389,11 +391,11 @@ class DHESN(LayeredESN):
         if self.encoder_type == 'PCA':
             for j in range(1, self.num_reservoirs):
                 # self.encoders.append(PCA(n_components=self.reservoirs[j-1].N))
-                self.encoders.append(PCA(n_components=self.dim_reduce))
+                self.encoders.append(PCA(n_components=self.dims_reduce[j-1]))
         elif self.encoder_type == 'VAE':
             for j in range(1, self.num_reservoirs):
-                self.encoders.append(VAE(input_size=self.reservoir_sizes[j-1], hidden_size=150, latent_variable_size=self.dim_reduce,
-                                            epochs=10, batch_size=32))
+                self.encoders.append(VAE(input_size=self.reservoir_sizes[j-1], latent_variable_size=self.dims_reduce[j-1],
+                                            epochs=2, batch_size=32))
         else:
             raise NotImplementedError('non-PCA/VAE encodings not done yet')
 
@@ -406,22 +408,27 @@ class DHESN(LayeredESN):
             #     idx=i+1, activation=activation, debug=self.debug
             # ))
             self.reservoirs.append(Reservoir(
-                input_size=self.dim_reduce, num_units=size, echo_param=echo_prm,
+                input_size=self.dims_reduce[i], num_units=size, echo_param=echo_prm,
                 idx=i+1, activation=activation, debug=self.debug
             ))
 
     def __forward_routing_rule__(self, u_n):
         x_n = np.zeros(0)
 
-        u_n = (u_n.reshape(-1, self.K) - self.data_mean).squeeze()
+        # u_n = (u_n.reshape(-1, self.K) - self.data_mean).squeeze()
 
-        for reservoir, encoder in zip(self.reservoirs, self.encoders):
-            u_n = reservoir.forward(u_n)
-            u_n -= self.reservoir_means[i]
+        for i, (reservoir, encoder) in enumerate(zip(self.reservoirs, self.encoders)):
+            u_n = np.array(reservoir.forward(u_n))
+            # u_n -= self.reservoir_means[i]
 
             if self.encoder_type == 'PCA':
                 u_n = encoder.transform(u_n.reshape(1, -1)).squeeze()
             elif self.encoder_type == 'VAE':
+                # print(u_n[:3])
+                u_n -= self.reservoir_means[i]
+                # print(u_n[:3])
+                # print("="*10)
+                u_n /= self.reservoir_stds[i]
                 u_n = encoder.encode(Variable(th.FloatTensor(u_n)))[0].data.numpy()
 
             x_n = np.append(x_n, u_n)
@@ -437,18 +444,28 @@ class DHESN(LayeredESN):
         X = X.reshape(-1, self.K)
         y = y.reshape(-1, self.L)
         #assert self.encoder_type != 'PCA' or np.mean(X) < 1e-3, "Input data must be zero-mean to use PCA encoding."
-        self.data_mean = np.mean(X, axis=0)
-        X -= self.data_mean
+        print("X mean: {}, y mean: {}".format(np.mean(X, axis=0), np.mean(y, axis=0)))
+        self.data_mean = np.mean(X, axis=0)[0]
+        # plt.plot(range(np.shape(X)[0]), X, label="before")
+        print("mean: {}".format(self.data_mean))
+        # print(np.shape(X))
+        # print(np.shape(y))
+        # print(np.shape(self.data_mean))
+        # X -= self.data_mean
+        # y -= self.data_mean
+        print("X mean: {}, y mean: {}".format(np.mean(X, axis=0), np.mean(y, axis=0)))
+        # plt.plot(range(np.shape(X)[0]), X, label="after")
+        # plt.show()
 
         T = len(X) - self.init_echo_timesteps*self.num_reservoirs
         # S = np.zeros((T, self.N+self.K))
         # S = np.zeros((T, 5))
-        S = np.zeros((T, (self.num_reservoirs-1)*self.dim_reduce+self.K+self.reservoirs[-1].N))
+        S = np.zeros((T, np.sum(self.dims_reduce)+self.K+self.reservoirs[-1].N))
         # S: collection of extended system states (encoder outputs plus inputs)
         #     at each time-step t
         S[:, -self.K:] = X[self.init_echo_timesteps*self.num_reservoirs:]
         # delim = np.array([0]+[r.N for r in self.reservoirs])
-        delim = np.array([0]+[self.dim_reduce]*(self.num_reservoirs-1)+[self.reservoirs[-1].N])
+        delim = np.array([0]+self.dims_reduce+[self.reservoirs[-1].N])
         for i in range(1, len(delim)):
             delim[i] += delim[i-1]
             
@@ -476,17 +493,29 @@ class DHESN(LayeredESN):
             if i != self.num_reservoirs - 1:
                 encoder = self.encoders[i]
                 res_mean = np.mean(S_i, axis=0)
+                res_std = np.std(S_i, axis=0)
+                # print("MEAN: {}".format(res_mean))
+                # print("STD: {}".format(res_std))
+                # print(res_mean)
                 self.reservoir_means[i] = res_mean
-                S_i -= res_mean
+                self.reservoir_stds[i] = res_std
+                # S_i -= res_mean
                 # Now train the encoder using the gathered state data
                 if self.encoder_type == 'PCA':
                     encoder.fit(S_i)
                     S_i = encoder.transform(S_i)
                 elif self.encoder_type == 'VAE':
+                    # print(S_i[:3])
+                    S_i -= res_mean
+                    # print(S_i[:3])
+                    # print("="*10)
+                    S_i /= res_std
                     # encoder.train_full(Variable(th.FloatTensor(S_i)))
                     # S_i = encode.encode(S_i).data().numpy()
                     encoder.train_full(th.FloatTensor(S_i))
                     S_i = encoder.encode(Variable(th.FloatTensor(S_i)))[0].data.numpy()
+                    # S_i = encoder.encode(Variable(th.FloatTensor(S_i))).data.numpy()
+                # S_i += res_mean[:100]
 
             # first few are for the next burn-in
             burn_in = S_i[:self.init_echo_timesteps, :]
@@ -508,7 +537,7 @@ class DHESN(LayeredESN):
         # Solve linear system
         T1 = np.dot(D.T, S)
         # T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye(self.K + self.N))
-        T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye((len(self.reservoirs)-1)*self.dim_reduce+self.K+self.reservoirs[-1].N))
+        T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye(np.sum(self.dims_reduce)+self.K+self.reservoirs[-1].N))
         self.W_out = np.dot(T1, T2)
 
     @property

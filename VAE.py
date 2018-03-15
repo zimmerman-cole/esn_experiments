@@ -42,12 +42,13 @@ import numpy as np
 
 
 class VAE(nn.Module):
-    def __init__(self, input_size, hidden_size=100, latent_variable_size=5,
+    def __init__(self, input_size, hidden_size=None, latent_variable_size=5,
                     log_interval=2, batch_size=32, epochs=3):
         super(VAE, self).__init__()
 
         self.input_size = input_size
-        self.hidden_size = hidden_size
+        if hidden_size is None: self.hidden_size = (input_size + latent_variable_size) / 2
+        else: self.hidden_size = hidden_size
         self.latent_variable_size = latent_variable_size
 
         self.log_interval = log_interval
@@ -70,6 +71,8 @@ class VAE(nn.Module):
         self.sigmoid = nn.Sigmoid()
 
         self.optimizer = optim.Adam(self.parameters(), lr=1e-3)
+
+        self.avg_loss_history = []
 
     def encode(self, x):
         h1 = self.relu(self.fc1(x))
@@ -110,7 +113,7 @@ class VAE(nn.Module):
         self.train()
         train_loss = 0
         # for batch_idx, data in enumerate(train_data):
-        for batch_idx in range(len(train_data)/self.batch_size):
+        for batch_idx in range(0, len(train_data), self.batch_size):
             # data = Variable(data)
             data = Variable(train_data[batch_idx:(batch_idx+self.batch_size)])
             # if args.cuda:
@@ -130,6 +133,7 @@ class VAE(nn.Module):
         print('====> Epoch: {} Average loss: {:.8f}'.format(
             epoch_idx, train_loss / len(train_data)))
             # epoch, train_loss / len(self.train_data.dataset)))
+        self.avg_loss_history.append(train_loss / len(train_data))
 
     def test(self, epoch_idx, test_data):
         self.eval()
@@ -163,10 +167,17 @@ class VAE(nn.Module):
             self.train_one_epoch(epoch, train_data)
             if test_data is not None:
                 self.test(epoch, test_data)
-            # sample = Variable(torch.randn(64, 20))
-            # sample = self.decode(sample)
-            # save_image(sample.data.view(64, 1, 28, 28),
-            #         'results/sample_' + str(epoch) + '.png')
+            self.sample()
+
+    def sample(self):
+        # print(torch.sort(torch.randn(200, self.latent_variable_size), dim=0))
+        sample = Variable(torch.sort(torch.randn(200, self.latent_variable_size), dim=0)[0])
+        sample = self.decode(sample)
+        # print(sample)
+        # print(sample.size())
+        # save_image(sample.data.view(64, 1, 15, 20)*255,
+        #         'sample_' + str(epoch) + '.png')
+        return sample.data.numpy()
 
 # model = VAE()
 # if args.cuda:

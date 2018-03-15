@@ -81,7 +81,7 @@ def ESN_stochastic_train(data, train_split, val_split, esn, num_runs, MEAN_OF_DA
 
         #mean_gen_test += gen_err_test
         #mean_gen_train += gen_err_train
-        gen_test.append(gen_err_test)
+        gen_test.append(gen_erMEAN_OF_DATA = np.mean(data)r_test)
         gen_train.append(gen_err_train)
         gen_val.append(gen_err_val)
 
