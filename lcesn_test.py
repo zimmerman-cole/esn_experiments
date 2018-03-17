@@ -2,19 +2,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 from ESN.ESN import LCESN, ESN
 from MackeyGlass.MackeyGlassGenerator import run
-
-
-def mse(y1, y2):
-    return np.mean((y1-y2)**2)
-
+from Helper.utils import nrmse
 
 if __name__ == '__main__':
     data = np.array([run(21100)]).reshape(-1, 1)
+    data_mean = np.mean(data, axis=0)
     split = 20100
-    X_train = data[:split-1]
-    y_train = data[1:split]
-    X_valid = data[split-1:-1]
-    y_valid = data[split:]
+    X_train = np.array(data[:split-1])
+    y_train = np.array(data[1:split])
+    X_valid = np.array(data[split-1:-1])
+    y_valid = np.array(data[split:])
 
     esn = ESN(1, 1, 1000, echo_param=0.85, regulariser=1e-6)
     esn.initialize_input_weights(scale=1.0)
@@ -48,13 +45,13 @@ if __name__ == '__main__':
     esn_outputs = np.array(esn_outputs).squeeze()
     lcesn_outputs = np.array(lcesn_outputs).squeeze()
 
-    print('  ESN MSE: %f' % mse(y_valid, esn_outputs))
-    print('LCESN MSE: %f' % mse(y_valid, lcesn_outputs))
+    print('  ESN MSE: %f' % nrmse(y_valid, esn_outputs, data_mean))
+    print('LCESN MSE: %f' % nrmse(y_valid, lcesn_outputs, data_mean))
 
     if 1:
         f, ax = plt.subplots(figsize=(12, 12))
         ax.plot(range(len(esn_outputs)), esn_outputs, label='ESN')
-        ax.plot(range(len(lcesn_outputs)), lcesn_outputs, label='LCESN')
+        #ax.plot(range(len(lcesn_outputs)), lcesn_outputs, label='LCESN')
         ax.plot(range(len(y_valid)), y_valid, label='True')
         plt.legend()
 
