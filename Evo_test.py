@@ -28,14 +28,17 @@ if __name__ == '__main__':
     #
     #=================================
     episodes = 1000
-    name = "ESN_1000_RES_"
+    name = "EESN_GArun1"
     population = 15
     std = 0.01
     learn_rate = 0.001
-    base_esn = ESN(input_size=1, output_size=1, reservoir_size=1000, regulariser=1e-5)
+    n = 10
+    base_esn = EESN(input_size=1, output_size=1, 
+                    reservoir_sizes=np.linspace(10, 500, n, endpoint=True), 
+                    regulariser=1e-4)
     # base_esn = ESN(input_size=1, output_size=1, reservoir_size=300, regulariser=1e-6)
-    base_esn.initialize_input_weights(scale=1.0)
-    base_esn.initialize_reservoir_weights(spectral_scale=1.25)
+    base_esn.initialize_input_weights(scales=1.0)
+    base_esn.initialize_reservoir_weights(spectral_scale=np.linspace(1, 1.35, n, endpoint=True))
     base_esn.train(X_train, y_train)
     y_pred = []
 
@@ -60,5 +63,11 @@ if __name__ == '__main__':
     # RunES(episodes, name, population, std, learn_rate,
     #         (X_train, y_train), (X_valid, y_valid), MEAN_OF_DATA, base_esn)
 
+    params_base = np.zeros(3*n)
+    params_base[:n] = 0.8
+    params_base[n:(2*n)] = np.linspace(1, 1.35, n, endpoint=True)
+    params_base[(2*n):(3*n)] = 1.0
     RunGA(episodes, name, population,
-            (X_train, y_train), (X_valid, y_valid), MEAN_OF_DATA, base_esn, verbose=True)
+            (X_train, y_train), (X_valid, y_valid), MEAN_OF_DATA, base_esn, 
+            params_base=params_base,
+            verbose=True)

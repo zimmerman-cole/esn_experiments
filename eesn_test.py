@@ -101,21 +101,32 @@ if __name__ == '__main__':
                         # _weightins = [0.2, 1.0, 1.0, 1.0, 1.0]
                         # print(range(10, 100, n-1)[::-1])
                         print("EXPERIMENT: \n\tRES: {}, \n\tECH: {}, \n\tSPEC: {}, \n\tWEIGHTIN: {}".format(_reservoirs, _echoes, _spectrals, _weightins))
-                        eesn = DHESN(1, 1, n,
-                                    reservoir_sizes=_reservoirs, 
-                                    echo_params=_echoes, 
-                                    regulariser=reg, debug=True,
+                        #eesn = DHESN(1, 1, n,
+                                    #reservoir_sizes=_reservoirs, 
+                                    #echo_params=_echoes, 
+                                    #regulariser=reg, debug=True,
                                     # activation=(lambda x: x*(x>0).astype(float)),
                                     # activation=(lambda x: x),
-                                    init_echo_timesteps=100, dims_reduce=(np.linspace(200, 50, n-1).astype(int).tolist()),
+                                    #init_echo_timesteps=100, dims_reduce=(np.linspace(200, 50, n-1).astype(int).tolist()),
                                     # init_echo_timesteps=100, dims_reduce=(np.linspace(50, 200, n-1).astype(int).tolist()),
-                                    encoder_type='VAE')
-                        eesn.initialize_input_weights(scales=_weightins, strategies='uniform')
+                                    #encoder_type='VAE')
+                        #eesn.initialize_input_weights(scales=_weightins, strategies='uniform')
+                        #eesn.initialize_reservoir_weights(
+                                    #spectral_scales=_spectrals,
+                                    #strategies=['uniform']*n,
+                                    #sparsity=0.1
+                                    #)
+                        eesn = EESN(1, 1, 3,
+                                    echo_params=0.85,
+                                    regulariser=1e-5, debug=True,
+                                    # activation=(lambda x: x*(x>0).astype(float)),
+                                    # activation=(lambda x: x),
+                                    init_echo_timesteps=100)
+                                    # init_echo_timesteps=100, dims_reduce=(np.linspace(50, 200, n-1).astype(int).tolist()),
+                        eesn.initialize_input_weights(scales=1.0)
                         eesn.initialize_reservoir_weights(
-                                    spectral_scales=_spectrals,
-                                    strategies=['uniform']*n,
-                                    sparsity=0.1
-                                    )
+                                    spectral_scales=1.25,
+                                    sparsity=1.0)
                         eesn.train(X_train, y_train)
 
                         eesn_outputs = []
@@ -195,11 +206,11 @@ if __name__ == '__main__':
     # plt.show()
 
     # save the data
-    file_name = 'DHESN_RESULTS/DHESN_data_{}_{}.csv'.format(EXPERIMENT_NAME, datetime.date.today())
-    np.savetxt(file_name, data_csv, delimiter=',', 
-                fmt=['%d', '%d', '%d', '%.3f', '%.3f', '%.3f', '%.3f', '%.2e', '%.4f'],
-                header='No. res, res sizes (min), (max), echo values (min), (max), '+
-                'spectral values (min), (max), reg., NRMSE')
+    #file_name = 'DHESN_RESULTS/DHESN_data_{}_{}.csv'.format(EXPERIMENT_NAME, datetime.date.today())
+    #np.savetxt(file_name, data_csv, delimiter=',', 
+                #fmt=['%d', '%d', '%d', '%.3f', '%.3f', '%.3f', '%.3f', '%.2e', '%.4f'],
+                #header='No. res, res sizes (min), (max), echo values (min), (max), '+
+                #'spectral values (min), (max), reg., NRMSE')
 
     if 0:
         f, ax = plt.subplots(figsize=(12, 12))
