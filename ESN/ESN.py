@@ -4,7 +4,7 @@ import pickle as pkl
 import time
 from abc import abstractmethod
 import matplotlib.pyplot as plt
-from sklearn.decomposition import PCA
+#from sklearn.decomposition import PCA
 
 import torch as th
 from torch.autograd import Variable
@@ -139,11 +139,11 @@ class ESN(object):
         if output_activation is not None:
             raise NotImplementedError('non-identity output activations not implemented.')
         # ========================================================================
-        self.reservoir = Reservoir(input_size=input_size, num_units=reservoir_size, 
-                                    echo_param=echo_param, activation=activation, debug=debug)
-        self.K = input_size
+        self.K = input_size + 1
         self.N = reservoir_size
         self.L = output_size
+        self.reservoir = Reservoir(input_size=self.K, num_units=self.N, 
+                                    echo_param=echo_param, activation=activation, debug=debug)
         if output_activation is None:
             def iden(x): return x
             output_activation = iden    # <- identity
@@ -161,9 +161,12 @@ class ESN(object):
                                      sparsity=1.0):
         self.reservoir.initialize_reservoir_weights(strategy, spectral_scale, offset, sparsity)
 
-    def forward(self, u_n):
+    def forward(self, u_n, add_bias=True):
         u_n = u_n.squeeze()
-        assert (self.K == 1 and u_n.shape == ()) or len(u_n) == self.K
+        if add_bias:
+            u_n = np.hstack((u_n, 1)) 
+
+        assert len(u_n) == self.K, "unexpected input dimensionality (check bias)"
 
         x_n = self.reservoir.forward(u_n)  # reservoir states at time n
         z_n = np.append(x_n, u_n)          # extended system states at time n
@@ -174,7 +177,9 @@ class ESN(object):
 
         return output.squeeze()
 
-    def train(self, X, y):
+    def train(self, X, y, add_bias=True):
+        if add_bias:
+            X = np.hstack([X, np.ones((X.shape[0], 1))])
         assert X.shape[1] == self.K, "training data has unexpected dimensionality (%s); K = %d" % (X.shape, self.K)
         X = X.reshape(-1, self.K)
         y = y.reshape(-1, self.L)
@@ -242,7 +247,7 @@ class LayeredESN(object):
         if output_activation is not None:
             raise NotImplementedError('non-identity output activations not implemented.')
         # ========================================================================
-        self.K = input_size
+        self.K = input_size + 1
         self.L = output_size
         self.num_reservoirs = num_reservoirs
         self.reservoir_sizes = reservoir_sizes
@@ -311,14 +316,18 @@ class LayeredESN(object):
     def __reservoir_input_size_rule__(self, *args):
         pass
 
-    def forward(self, u_n, calculate_output=True):
+    def forward(self, u_n, calculate_output=True, add_bias=True):
         """
         Forward-propagate signal through network.
         If calculate_output = True: returns output signal, y_n.
                               else: returns updated system states, x_n.
         """
         u_n = u_n.squeeze()
-        assert (self.K == 1 and u_n.shape == ()) or len(u_n) == self.K
+
+        if add_bias:
+            u_n = np.hstack((u_n, 1))
+
+        assert  len(u_n) == self.K
 
         x_n = self.__forward_routing_rule__(u_n)
 
@@ -329,7 +338,9 @@ class LayeredESN(object):
         else:
             return x_n
 
-    def train(self, X, y):
+    def train(self, X, y, add_bias=True):
+        if add_bias:
+            X = np.hstack([X, np.ones((X.shape[0], 1))])
         assert X.shape[1] == self.K, "Training data has unexpected dimensionality (%s). K = %d." % (X.shape, self.K)
         X = X.reshape(-1, self.K)
         y = y.reshape(-1, self.L)
@@ -337,14 +348,14 @@ class LayeredESN(object):
         # First, run a few inputs into the reservoir to get it echoing
         initial_data = X[:self.init_echo_timesteps]
         for u_n in initial_data:
-            _ = self.forward(u_n, calculate_output=False)
+            _ = self.forward(u_n, calculate_output=False, add_bias=False)
 
         # Now train the output weights
         X_train = X[self.init_echo_timesteps:]
         D = y[self.init_echo_timesteps:]
         S = np.zeros((X_train.shape[0], self.N+self.K))
         for n, u_n in enumerate(X_train):
-            x_n = self.forward(u_n, calculate_output=False)
+            x_n = self.forward(u_n, calculate_output=False, add_bias=False)
             z_n = np.append(x_n, u_n)
             S[n, :] = z_n
 

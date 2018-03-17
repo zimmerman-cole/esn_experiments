@@ -34,7 +34,8 @@ class GeneticAlgorithm(object):
         self.num_resamples = num_resamples
         self.population = population * self.num_resamples     # number of individuals in one population
         self.individuals = np.clip(np.random.randn(self.population, self.num_params)*0.1 +
-        np.array([0.85, 1.25, 1.0]), 0, 1.5) # the population, itself
+        #np.array([0.85, 1.25, 1.0]), 0, 1.5) # the population, itself
+        params_base, 0, 1.5)
         self.individuals_fitness = np.zeros(self.population)  # the fitness of each member of the population
 
         self.culm_mean_reward = None
@@ -641,7 +642,7 @@ def RunES(episodes, name, population, std, learn_rate,
 
     return e_op.reward_hist_pop
 
-def RunGA(episodes, name, population, data_train, data_val, MEAN_OF_DATA, base_esn, verbose=False):
+def RunGA(episodes, name, population, data_train, data_val, MEAN_OF_DATA, base_esn, params_base, verbose=False):
     '''
     Call this function to setup the 'agent' and the GA optimiser to then
     do the optimisation.
@@ -649,7 +650,8 @@ def RunGA(episodes, name, population, data_train, data_val, MEAN_OF_DATA, base_e
     name = "Results/"+name
     agent = Agent(data_train, data_val, MEAN_OF_DATA, base_esn)
     ga_op = GeneticAlgorithm(
-        reward_function=agent.run_episode, num_params=agent.num_params,
+        reward_function=agent.run_episode, 
+        num_params=agent.num_params, params_base=params_base),
         population=population, verbose=True, num_resamples=1)
 
     ga_op.train(episodes, name)
