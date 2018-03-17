@@ -139,7 +139,7 @@ class ESN(object):
         if output_activation is not None:
             raise NotImplementedError('non-identity output activations not implemented.')
         # ========================================================================
-        self.K = input_size + 1
+        self.K = input_size
         self.N = reservoir_size
         self.L = output_size
         self.reservoir = Reservoir(input_size=self.K, num_units=self.N, 
@@ -163,13 +163,13 @@ class ESN(object):
 
     def forward(self, u_n, add_bias=True):
         u_n = u_n.squeeze()
-        if add_bias:
-            u_n = np.hstack((u_n, 1)) 
 
-        assert len(u_n) == self.K, "unexpected input dimensionality (check bias)"
+        assert (self.K == 1 and u_n.shape == ()) or len(u_n) == self.K, "unexpected input dimensionality (check bias)"
 
         x_n = self.reservoir.forward(u_n)  # reservoir states at time n
         z_n = np.append(x_n, u_n)          # extended system states at time n
+        if add_bias:
+            z_n = np.hstack((z_n, 1)) 
 
         # by default, output activation is identity
         # output = self.output_activation(np.dot(z_n, self.W_out.T))
@@ -178,8 +178,6 @@ class ESN(object):
         return output.squeeze()
 
     def train(self, X, y, add_bias=True):
-        if add_bias:
-            X = np.hstack([X, np.ones((X.shape[0], 1))])
         assert X.shape[1] == self.K, "training data has unexpected dimensionality (%s); K = %d" % (X.shape, self.K)
         X = X.reshape(-1, self.K)
         y = y.reshape(-1, self.L)
@@ -201,15 +199,19 @@ class ESN(object):
             S[n, :] = z_n
         if self.debug: print('-'*10+'Extended system states collected.'+'-'*10)
 
+        if add_bias:
+            S = np.hstack([S, np.ones((S.shape[0], 1))])
         # Solve (W_out)(S.T) = (D) by least squares
         T1 = np.dot(D.T, S)                                                       # L     x (N+K)
-        T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye(self.K + self.N))  # (N+K) x (N+K)
+        reg = self.regulariser * np.eye(self.K + self.N+1)
+        reg[-1, -1] = 0
+        T2 = la.inv(np.dot(S.T, S) + reg)  # (N+K) x (N+K)
         self.W_out = np.dot(T1, T2)                                               # L     x (N+K)
         
     def reset_reservoir_states(self):
         self.reservoir.state = np.zeros(self.N)
 
-    def getInputSize(self): return self.K
+    def getInputSize(self): return self.K-1
 
     def getOutputSize(self): return self.L
 
@@ -368,7 +370,7 @@ class LayeredESN(object):
         for reservoir in self.reservoirs:
             reservoir.state *= 0.
 
-    def getInputSize(self): return self.K
+    def getInputSize(self): return self.K-1
 
     def getOutputSize(self): return self.L
 

@@ -651,7 +651,7 @@ def RunGA(episodes, name, population, data_train, data_val, MEAN_OF_DATA, base_e
     agent = Agent(data_train, data_val, MEAN_OF_DATA, base_esn)
     ga_op = GeneticAlgorithm(
         reward_function=agent.run_episode, 
-        num_params=agent.num_params, params_base=params_base),
+        num_params=agent.num_params, params_base=params_base,
         population=population, verbose=True, num_resamples=1)
 
     ga_op.train(episodes, name)

@@ -33,12 +33,12 @@ if __name__ == '__main__':
     std = 0.01
     learn_rate = 0.001
     n = 10
-    base_esn = EESN(input_size=1, output_size=1, 
-                    reservoir_sizes=np.linspace(10, 500, n, endpoint=True), 
+    base_esn = EESN(input_size=1, output_size=1, num_reservoirs=n, 
+                    reservoir_sizes=np.linspace(10, 500, n, endpoint=True).astype(int),
                     regulariser=1e-4)
     # base_esn = ESN(input_size=1, output_size=1, reservoir_size=300, regulariser=1e-6)
     base_esn.initialize_input_weights(scales=1.0)
-    base_esn.initialize_reservoir_weights(spectral_scale=np.linspace(1, 1.35, n, endpoint=True))
+    base_esn.initialize_reservoir_weights(spectral_scales=np.linspace(1, 1.35, n, endpoint=True).tolist())
     base_esn.train(X_train, y_train)
     y_pred = []
 
