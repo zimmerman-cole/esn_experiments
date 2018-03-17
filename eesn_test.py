@@ -107,7 +107,8 @@ if __name__ == '__main__':
                                     regulariser=reg, debug=True,
                                     # activation=(lambda x: x*(x>0).astype(float)),
                                     # activation=(lambda x: x),
-                                    init_echo_timesteps=100, dims_reduce=(np.linspace(50, 200, n-1).astype(int).tolist()),
+                                    init_echo_timesteps=100, dims_reduce=(np.linspace(200, 50, n-1).astype(int).tolist()),
+                                    # init_echo_timesteps=100, dims_reduce=(np.linspace(50, 200, n-1).astype(int).tolist()),
                                     encoder_type='VAE')
                         eesn.initialize_input_weights(scales=_weightins, strategies='uniform')
                         eesn.initialize_reservoir_weights(
