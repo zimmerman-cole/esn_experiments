@@ -4,7 +4,7 @@ import pickle as pkl
 import time
 from abc import abstractmethod
 import matplotlib.pyplot as plt
-#from sklearn.decomposition import PCA
+from sklearn.decomposition import PCA
 
 import torch as th
 from torch.autograd import Variable
@@ -376,6 +376,13 @@ class LayeredESN(object):
 
     def getOutputSize(self): return self.L
 
+    def info(self):
+        inp_scales = [r.input_weights_scale for r in self.reservoirs]
+        spec_scales = [r.spectral_scale for r in self.reservoirs]
+        echo_prms = [r.echo_param for r in self.reservoirs]
+        out = """
+        num_res: %d\nres_sizes:%s\necho_params:%s\ninput_scales:%s\nspectral_scales:%s
+        """ % (self.num_reservoirs, self.reservoir_sizes, echo_prms, inp_scales, spec_scales)
 
 class DHESN(LayeredESN):
 
@@ -569,7 +576,7 @@ class DHESN(LayeredESN):
 
 class LCESN(LayeredESN):
     
-    def __reservoir_input_size_rule__(self, reservoir_sizes, echo_params):
+    def __reservoir_input_size_rule__(self, reservoir_sizes, echo_params, activation):
         """
         Set up the reservoirs so that the first takes the input signal as input,
           and the rest take the previous reservoir's state as input.
@@ -579,7 +586,7 @@ class LCESN(LayeredESN):
         for i, (size, echo_prm) in enumerate(zip(reservoir_sizes, echo_params)[1:]):
             self.reservoirs.append(Reservoir(
                 input_size=self.reservoirs[i-1].N, num_units=size, echo_param=echo_prm,
-                idx=i+1, debug=self.debug
+                idx=i+1, activation=activation, debug=self.debug
             ))
 
     def __forward_routing_rule__(self, u_n):
