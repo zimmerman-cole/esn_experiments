@@ -5,7 +5,7 @@ import pickle as pkl
 import datetime
 import time
 
-from ESN.ESN import LayeredESN, LCESN, EESN, ESN
+from ESN.ESN import LayeredESN, LCESN, EESN, ESN, DHESN
 from Helper.utils import nrmse, LivePlotHistogram, LiveDataGraph
 
 MAX_REWARD = 1000000
@@ -488,7 +488,7 @@ class Agent(object):
         data_val : (X, y)
         base_esn : ESN to run the ES on
         '''
-        assert isinstance(base_esn, EESN) or isinstance(base_esn, LCESN) or isinstance(base_esn, ESN), "bad ESN type of {}".format(type(base_esn))
+        assert isinstance(base_esn, EESN) or isinstance(base_esn, LCESN) or isinstance(base_esn, ESN) or isinstance(base_esn, DHESN), "bad ESN type of {}".format(type(base_esn))
 
         self.data_train = data_train
         self.data_val = data_val
@@ -533,6 +533,20 @@ class Agent(object):
                         init_echo_timesteps=self.base_esn.init_echo_timesteps, regulariser=self.base_esn.regulariser, debug=self.base_esn.debug)
             esn.initialize_input_weights(scales=weightin_params.tolist())
             esn.initialize_reservoir_weights(spectral_scales=spec_params.tolist())
+        elif isinstance(self.base_esn, DHESN):
+            echo_params = params[:self.base_esn.num_reservoirs]
+            spec_params = params[self.base_esn.num_reservoirs:self.base_esn.num_reservoirs*2]
+            weightin_params = params[self.base_esn.num_reservoirs*2:]
+            esn = DHESN(input_size=self.base_esn.getInputSize(), output_size=self.base_esn.getOutputSize(), num_reservoirs=self.base_esn.num_reservoirs,
+                        reservoir_sizes=self.base_esn.reservoir_sizes, echo_params=echo_params, #self.base_esn.output_activation,
+                        init_echo_timesteps=self.base_esn.init_echo_timesteps, 
+                        regulariser=self.base_esn.regulariser, 
+                        debug=self.base_esn.debug,
+                        dims_reduce=(np.linspace(200, 50, len(self.base_esn.encoders)).astype(int).tolist()),
+                # init_echo_timesteps=100, dims_reduce=(np.linspace(50, 200, n-1).astype(int).tolist()),
+                        encoder_type='VAE')
+            esn.initialize_input_weights(scales=weightin_params.tolist())
+            esn.initialize_reservoir_weights(spectral_scales=spec_params.tolist(), sparsity=0.1)
         else: #ESN
             echo_params = params[0]
             spec_params = params[1]

@@ -326,7 +326,7 @@ class LayeredESN(object):
         """
         u_n = u_n.squeeze()
 
-        assert  len(u_n) == self.K
+        assert (self.K == 1 and u_n.shape == ()) or  len(u_n) == self.K
 
         x_n = self.__forward_routing_rule__(u_n)
 
@@ -365,14 +365,14 @@ class LayeredESN(object):
 
         # Solve linear system
         T1 = np.dot(D.T, S)
-        T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye(self.K + self.N))
+        T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye(self.K + self.N+1))
         self.W_out = np.dot(T1, T2)
         
     def reset_reservoir_states(self):
         for reservoir in self.reservoirs:
             reservoir.state *= 0.
 
-    def getInputSize(self): return self.K-1
+    def getInputSize(self): return self.K
 
     def getOutputSize(self): return self.L
 
@@ -392,7 +392,7 @@ class DHESN(LayeredESN):
         
         super(DHESN, self).__init__(*args, **kwargs)
         
-        print(self.dims_reduce)
+        # print(self.dims_reduce)
         self.data_mean = None
         self.reservoir_means = [
             np.zeros(N_i) for N_i in self.reservoir_sizes
@@ -453,22 +453,22 @@ class DHESN(LayeredESN):
 
         return x_n
 
-    def train(self, X, y, debug_info=False):
+    def train(self, X, y, debug_info=False, add_bias=True):
         """ (needs different train() because reservoirs+encoders have to be warmed up+trained one at a time."""
         assert X.shape[1] == self.K, "Training data has unexpected dimensionality (%s). K = %d." % (X.shape, self.K)
         X = X.reshape(-1, self.K)
         y = y.reshape(-1, self.L)
         #assert self.encoder_type != 'PCA' or np.mean(X) < 1e-3, "Input data must be zero-mean to use PCA encoding."
-        print("X mean: {}, y mean: {}".format(np.mean(X, axis=0), np.mean(y, axis=0)))
+        # print("X mean: {}, y mean: {}".format(np.mean(X, axis=0), np.mean(y, axis=0)))
         self.data_mean = np.mean(X, axis=0)[0]
         # plt.plot(range(np.shape(X)[0]), X, label="before")
-        print("mean: {}".format(self.data_mean))
+        # print("mean: {}".format(self.data_mean))
         # print(np.shape(X))
         # print(np.shape(y))
         # print(np.shape(self.data_mean))
         # X -= self.data_mean
         # y -= self.data_mean
-        print("X mean: {}, y mean: {}".format(np.mean(X, axis=0), np.mean(y, axis=0)))
+        # print("X mean: {}, y mean: {}".format(np.mean(X, axis=0), np.mean(y, axis=0)))
         # plt.plot(range(np.shape(X)[0]), X, label="after")
         # plt.show()
 
@@ -537,9 +537,9 @@ class DHESN(LayeredESN):
             # rest are the next inputs
             inputs = S_i[self.init_echo_timesteps:, :]
 
-            print(np.shape(inputs))
-            print(np.shape(S_i))
-            print(np.shape(S))
+            # print(np.shape(inputs))
+            # print(np.shape(S_i))
+            # print(np.shape(S))
             lb, ub = delim[i], delim[i+1]
             S[:, lb:ub] = S_i[(self.init_echo_timesteps*(self.num_reservoirs-i-1)):, :]
 
@@ -548,11 +548,14 @@ class DHESN(LayeredESN):
             if debug_info:
                 print('res %d mean state magnitude: %.4f' % (i, np.mean(np.abs(S_i))))
 
+        if add_bias:
+            S = np.hstack([S, np.ones((S.shape[0], 1))])
+
         D = y[self.init_echo_timesteps*self.num_reservoirs:]
         # Solve linear system
         T1 = np.dot(D.T, S)
         # T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye(self.K + self.N))
-        T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye(np.sum(self.dims_reduce)+self.K+self.reservoirs[-1].N))
+        T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye(np.sum(self.dims_reduce)+self.K+self.reservoirs[-1].N+1))
         self.W_out = np.dot(T1, T2)
 
     @property
