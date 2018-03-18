@@ -82,7 +82,8 @@ if __name__ == '__main__':
 
     data_samples = np.zeros((len(res_ranges)*len(echo_ranges)*len(spect_ranges)*len(res_number_ranges)*len(weightin_ranges), 1+2+2+2+1+1))
     data_csv = np.zeros((len(res_ranges)*len(echo_ranges)*len(spect_ranges)*len(res_number_ranges)*len(weightin_ranges), 1+2+2+2+1+1))
-    
+    runs = 200 
+    nrmses_d = []
     idx = 0
     for n in res_number_ranges:
         for r in res_ranges:
@@ -156,6 +157,7 @@ if __name__ == '__main__':
                         nrmse_err = nrmse(y_vals, eesn_outputs, MEAN_OF_DATA)
                         print('DHESN NRMSE: %f' % nrmse_err)
 
+>>>>>>> 3e3ef9118a4cc9737dfd7f99015b41daed27b8c1
                         plt.plot(range(len(eesn_outputs)), eesn_outputs, label="predicted")
                         plt.plot(range(len(y_vals)), y_vals, label="true")
                         plt.legend()
