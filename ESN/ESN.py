@@ -249,7 +249,7 @@ class LayeredESN(object):
         if output_activation is not None:
             raise NotImplementedError('non-identity output activations not implemented.')
         # ========================================================================
-        self.K = input_size + 1
+        self.K = input_size
         self.L = output_size
         self.num_reservoirs = num_reservoirs
         self.reservoir_sizes = reservoir_sizes
@@ -326,12 +326,12 @@ class LayeredESN(object):
         """
         u_n = u_n.squeeze()
 
-        if add_bias:
-            u_n = np.hstack((u_n, 1))
-
         assert  len(u_n) == self.K
 
         x_n = self.__forward_routing_rule__(u_n)
+
+        if add_bias:
+            u_n = np.hstack((u_n, 1))
 
         if calculate_output:
             z_n = np.append(x_n, u_n)
@@ -341,8 +341,7 @@ class LayeredESN(object):
             return x_n
 
     def train(self, X, y, add_bias=True):
-        if add_bias:
-            X = np.hstack([X, np.ones((X.shape[0], 1))])
+
         assert X.shape[1] == self.K, "Training data has unexpected dimensionality (%s). K = %d." % (X.shape, self.K)
         X = X.reshape(-1, self.K)
         y = y.reshape(-1, self.L)
@@ -360,6 +359,9 @@ class LayeredESN(object):
             x_n = self.forward(u_n, calculate_output=False, add_bias=False)
             z_n = np.append(x_n, u_n)
             S[n, :] = z_n
+
+        if add_bias:
+            S = np.hstack([S, np.ones((S.shape[0], 1))])
 
         # Solve linear system
         T1 = np.dot(D.T, S)

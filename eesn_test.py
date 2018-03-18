@@ -101,33 +101,33 @@ if __name__ == '__main__':
                         # _weightins = [0.2, 1.0, 1.0, 1.0, 1.0]
                         # print(range(10, 100, n-1)[::-1])
                         print("EXPERIMENT: \n\tRES: {}, \n\tECH: {}, \n\tSPEC: {}, \n\tWEIGHTIN: {}".format(_reservoirs, _echoes, _spectrals, _weightins))
-                        #eesn = DHESN(1, 1, n,
-                                    #reservoir_sizes=_reservoirs, 
-                                    #echo_params=_echoes, 
-                                    #regulariser=reg, debug=True,
+                        eesn = DHESN(1, 1, n,
+                                    reservoir_sizes=_reservoirs, 
+                                    echo_params=_echoes, 
+                                    regulariser=reg, debug=True,
                                     # activation=(lambda x: x*(x>0).astype(float)),
                                     # activation=(lambda x: x),
-                                    #init_echo_timesteps=100, dims_reduce=(np.linspace(200, 50, n-1).astype(int).tolist()),
+                                    init_echo_timesteps=100, dims_reduce=(np.linspace(200, 50, n-1).astype(int).tolist()),
                                     # init_echo_timesteps=100, dims_reduce=(np.linspace(50, 200, n-1).astype(int).tolist()),
-                                    #encoder_type='VAE')
-                        #eesn.initialize_input_weights(scales=_weightins, strategies='uniform')
-                        #eesn.initialize_reservoir_weights(
-                                    #spectral_scales=_spectrals,
-                                    #strategies=['uniform']*n,
-                                    #sparsity=0.1
-                                    #)
-                        eesn = ESN(1, 1, reservoir_size=1000,
-                                    echo_param=0.85,
-                                    regulariser=1e-5, debug=True,
-                                    # activation=(lambda x: x*(x>0).astype(float)),
-                                    # activation=(lambda x: x),
-                                    init_echo_timesteps=100)
-                                    # init_echo_timesteps=100, dims_reduce=(np.linspace(50, 200, n-1).astype(int).tolist()),
-                        eesn.initialize_input_weights(scale=1.0)
-                        #eesn.reservoir.W_in[:, -1] += MEAN_OF_DATA
+                                    encoder_type='VAE')
+                        eesn.initialize_input_weights(scales=_weightins, strategies='uniform')
                         eesn.initialize_reservoir_weights(
-                                    spectral_scale=1.25,
-                                    sparsity=1.0)
+                                    spectral_scales=_spectrals,
+                                    strategies=['uniform']*n,
+                                    sparsity=0.1
+                                    )
+                        # eesn = ESN(1, 1, reservoir_size=1000,
+                        #             echo_param=0.85,
+                        #             regulariser=1e-5, debug=True,
+                        #             # activation=(lambda x: x*(x>0).astype(float)),
+                        #             # activation=(lambda x: x),
+                        #             init_echo_timesteps=100)
+                        #             # init_echo_timesteps=100, dims_reduce=(np.linspace(50, 200, n-1).astype(int).tolist()),
+                        # eesn.initialize_input_weights(scale=1.0)
+                        # #eesn.reservoir.W_in[:, -1] += MEAN_OF_DATA
+                        # eesn.initialize_reservoir_weights(
+                        #             spectral_scale=1.25,
+                        #             sparsity=1.0)
                         eesn.train(X_train, y_train)
 
                         eesn_outputs = []
