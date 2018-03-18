@@ -5,6 +5,7 @@ from MackeyGlass.MackeyGlassGenerator import run
 from Helper.utils import nrmse
 import pickle as pkl
 import itertools
+import time
 
 if __name__ == '__main__':
     data = np.array([run(21100)]).reshape(-1, 1)
@@ -21,7 +22,7 @@ if __name__ == '__main__':
 
     num_reservoirs = 10
     echo_params_ = [np.linspace(0.85, 0.5, num_reservoirs)]
-    regulariser_ = [1e-3]
+    regulariser_ = [1e-2]
     spectral_scales_ = [np.linspace(0.9, 0.7, num_reservoirs)]
     input_scales_ = [np.linspace(0.2, 0.2, num_reservoirs)]
     reservoir_sizes_ = [np.linspace(200, 200, num_reservoirs).astype(int)]
@@ -92,6 +93,12 @@ if __name__ == '__main__':
 
                 #    plt.show()
 
+            if 1:
+                f, ax = plt.subplots(figsize=(12, 12))
+                w = lcesn.W_out.squeeze()
+                ax.bar(range(len(w)), w)
+                plt.show()
 
-    pkl.dump(to_save, open('Results/LCESN/18_March_3.p', 'wb'))
+    title = time.asctime().replace(' ', '-')
+    pkl.dump(to_save, open('Results/LCESN/%s.p' % title, 'wb'))
 
