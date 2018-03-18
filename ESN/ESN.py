@@ -508,7 +508,7 @@ class DHESN(LayeredESN):
             if i != self.num_reservoirs - 1:
                 encoder = self.encoders[i]
                 res_mean = np.mean(S_i, axis=0)
-                res_std = np.std(S_i, axis=0)
+                res_std = np.std(S_i, axis=0) + 1e-8
                 # print("MEAN: {}".format(res_mean))
                 # print("STD: {}".format(res_std))
                 # print(res_mean)
