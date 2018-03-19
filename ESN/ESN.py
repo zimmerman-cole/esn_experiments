@@ -112,8 +112,14 @@ class Reservoir(object):
         u_n: K-dimensional input vector
         """
         u_n = u_n.squeeze()
-        assert (self.K == 1 and u_n.shape == ()) or u_n.shape[0] == self.W_in.shape[1], \
-            "u(n): %s.  W_res: %s (ID=%d)" % (u_n.shape, self.W_res.shape, self.idx)
+        try:
+            assert (self.K == 1 and u_n.shape == ()) or u_n.shape[0] == self.W_in.shape[1], \
+                "u(n): %s.  W_res: %s (ID=%d)" % (u_n.shape, self.W_res.shape, self.idx)
+        except:
+            print(u_n.shape)
+            print(self.W_in.shape)
+            print(self.W_res.shape)
+            raise
         assert self.ins_init, "Res. input weights not yet initialized (ID=%d)." % self.idx
         assert self.res_init, "Res. recurrent weights not yet initialized (ID=%d)." % self.idx
 
@@ -585,7 +591,7 @@ class LCESN(LayeredESN):
                                          idx=0, debug=self.debug))
         for i, (size, echo_prm) in enumerate(zip(reservoir_sizes, echo_params)[1:]):
             self.reservoirs.append(Reservoir(
-                input_size=self.reservoirs[i-1].N, num_units=size, echo_param=echo_prm,
+                input_size=self.reservoirs[i].N, num_units=size, echo_param=echo_prm,
                 idx=i+1, activation=activation, debug=self.debug
             ))
 
