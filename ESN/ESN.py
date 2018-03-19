@@ -52,6 +52,7 @@ class Reservoir(object):
         # These parameters are initialized upon calling initialize_input_weights()
         # and initialize_reservoir_weights().
         self.spectral_scale = None
+        self.sparsity = None
         self.W_res_init_strategy = None
         self.input_weights_scale = None
         self.W_in_init_strategy = None
@@ -97,7 +98,8 @@ class Reservoir(object):
             raise ValueError('unknown res. weight init strategy %s' % strategy)
 
         # apply the sparsity
-        sparsity_matrix = (np.random.rand(self.N, self.N) < sparsity).astype(float)
+        self.sparsity = sparsity
+        sparsity_matrix = (np.random.rand(self.N, self.N) < self.sparsity).astype(float)
         self.W_res *= sparsity_matrix
 
         self.W_res -= offset
@@ -211,7 +213,7 @@ class ESN(object):
     def reset_reservoir_states(self):
         self.reservoir.state = np.zeros(self.N)
 
-    def getInputSize(self): return self.K-1
+    def getInputSize(self): return self.K
 
     def getOutputSize(self): return self.L
 
@@ -569,7 +571,7 @@ class DHESN(LayeredESN):
 
 class LCESN(LayeredESN):
     
-    def __reservoir_input_size_rule__(self, reservoir_sizes, echo_params):
+    def __reservoir_input_size_rule__(self, reservoir_sizes, echo_params, activation):
         """
         Set up the reservoirs so that the first takes the input signal as input,
           and the rest take the previous reservoir's state as input.
@@ -577,9 +579,10 @@ class LCESN(LayeredESN):
         self.reservoirs.append(Reservoir(self.K, reservoir_sizes[0], echo_params[0],
                                          idx=0, debug=self.debug))
         for i, (size, echo_prm) in enumerate(zip(reservoir_sizes, echo_params)[1:]):
+            print(i)
             self.reservoirs.append(Reservoir(
-                input_size=self.reservoirs[i-1].N, num_units=size, echo_param=echo_prm,
-                idx=i+1, debug=self.debug
+                input_size=self.reservoirs[i].N, num_units=size, echo_param=echo_prm,
+                idx=i+1, debug=self.debug, activation=activation
             ))
 
     def __forward_routing_rule__(self, u_n):
