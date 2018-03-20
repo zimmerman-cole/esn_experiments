@@ -13,10 +13,10 @@ MAX_REWARD = 1000000
 class GeneticAlgorithm(object):
 
     def __init__(self, reward_function, num_params, params_base=None, num_resamples=1,
-                population=20, mutation_prob=0.1, mutation_scale=0.1, 
-                selection_strategy='roulette', # roulette, ranked
-                generation_update_strategy='reset', # elitismWR (With Replacement), elitism, reset
-                crossover_rule='two-parent', # two-parent, single-parent
+                population=20, mutation_prob=0.2, mutation_scale=0.1, 
+                selection_strategy='ranked', # roulette, ranked
+                generation_update_strategy='elitism', # elitismWR (With Replacement), elitism, reset
+                crossover_rule='two-uniform', # two-parent, single-parent, two-uniform
                 verbose=False, seed=None):
         '''
         reward_function:    objective function to MAXIMISE
@@ -33,9 +33,13 @@ class GeneticAlgorithm(object):
 
         self.num_resamples = num_resamples
         self.population = population * self.num_resamples     # number of individuals in one population
-        self.individuals = np.clip(np.random.randn(self.population, self.num_params)*0.1 +
+        self.individuals = np.clip(np.random.randn(self.population, self.num_params)*0.0 +
         #np.array([0.85, 1.25, 1.0]), 0, 1.5) # the population, itself
         params_base, 0, 1.5)
+        print("BASE PARAMETERS: {}".format(params_base))
+        print("INITIAL POPULATION:")
+        for idx,p in enumerate(self.individuals):
+            print("\t {}: {}".format(idx, p))
         self.individuals_fitness = np.zeros(self.population)  # the fitness of each member of the population
 
         self.culm_mean_reward = None
@@ -130,6 +134,20 @@ class GeneticAlgorithm(object):
 
                 if self.verbose:
                     print('two-p crossover--> p1: {}, p2: {} at {} = {}'.format(p1, p2, c, p))
+            elif self.crossover_rule == 'two-uniform':
+                # sample an individual using the roulette strategy
+                p1 = np.argwhere(pop_probs > np.random.rand())[0][0]  # first parent
+                p2 = np.argwhere(pop_probs > np.random.rand())[0][0]  # second parent
+
+                # cross-over =========================================
+                # using single-point technique
+                c = np.random.rand(self.num_params > 0.5).astype(float)   # crossover point is chosen u.a.r. from [0, num_params-1]
+                p = np.zeros(self.num_params)                 # child chromosome
+                p += c * self.individuals[p1, :]              # ^
+                p += (1.0 - c) * self.individuals[p1, :]              # ^
+
+                if self.verbose:
+                    print('two-p crossover--> p1: {}, p2: {} at {} = {}'.format(p1, p2, c, p))
             elif self.crossover_rule == 'single-parent':
                 p1 = np.argwhere(pop_probs > np.random.rand())[0][0]
                 # child is a small perturbation of the parent
@@ -164,9 +182,14 @@ class GeneticAlgorithm(object):
                     if self.verbose:
                         print("keeping {} from old gen.".format(p))
                     new_generation[k, :] = self.individuals[p, :] 
+        elif self.generation_update_strategy == 'elitism':
+            idx_sort = self.individuals_fitness.argsort()
+            for k in range(0, self.population/5, self.num_resamples):
+                p_idx = idx_sort[k]
+                new_generation[k, :] = self.individuals[p_idx, :]
         
         # completely replace the old generation
-        self.individuals = new_generation
+        self.individuals = np.array(new_generation)
 
     def step(self):
         """ Calculates fitness of each member of current population, then spawns a new generation. """
@@ -176,10 +199,13 @@ class GeneticAlgorithm(object):
         pop_count = 0
         for k in range(np.shape(self.individuals)[0]):
             # run the individual through the objective function
-            r = self.reward_function(self.individuals[k, :])
+            r, r_std = self.reward_function(self.individuals[k, :])
 
             if self.verbose:
-                print("INDIVIDUAL {} --> reward: {} \n\t\t PARAMS: {}".format(k, r, self.individuals[k, :]))
+                print("INDIVIDUAL {} --> reward: {} +- {} \n\t\t PARAMS: \n\tE:{}, \n\tS:{}, \n\tW:{}".format(k, r, r_std, 
+                self.individuals[k, :8],
+                self.individuals[k, 8:16],
+                self.individuals[k, 16:]))
 
             self.individuals_fitness[k] = r
 
@@ -232,7 +258,7 @@ class GeneticAlgorithm(object):
             # run the environment on the base parameters
             if i % self.base_run_rate == 0:
                 self.best_individual = self.individuals[np.argmax(self.individuals_fitness), :]
-                base_run = self.reward_function(self.best_individual)
+                base_run, b_std = self.reward_function(self.best_individual)
                 # record cumulative mean reward of the base params
                 if self.culm_mean_reward_base == None:
                     self.culm_mean_reward_base = base_run
@@ -241,8 +267,8 @@ class GeneticAlgorithm(object):
 
                 self.reward_hist_base.append(self.culm_mean_reward_base)
 
-                print('episode {}, base reward: {}, pop. reward: {}, pop. reward ov. time: {}, base reward ov. time: {}, num survived: {}'.format(
-                    i, base_run, mean_reward, self.culm_mean_reward, self.culm_mean_reward_base, num_survived)
+                print('episode {}, base reward: {} +- {}, pop. reward: {}, pop. reward ov. time: {}, base reward ov. time: {}, num survived: {}'.format(
+                    i, base_run, b_std, mean_reward, self.culm_mean_reward, self.culm_mean_reward_base, num_survived)
                 )
 
             # save the state every 20 epochs (or the last epochs)
@@ -301,7 +327,7 @@ class GeneticAlgorithm(object):
 class EvolutionaryStrategiesOptimiser(object):
 
     def __init__(self, reward_function, num_params, params_base=None,
-                 population=100, std=0.1, learn_rate=0.01, num_resamples=3,
+                 population=100, std=0.01, learn_rate=0.01, num_resamples=1,
                  seed=None,
                  verbose=False, base_run_rate=1):
         '''
@@ -362,10 +388,10 @@ class EvolutionaryStrategiesOptimiser(object):
             # we add the noise to the base parameter and see how the perturbation
             #  affects the output (similar to finite gradients estimation)
             p = np.clip(self.params_base + k*self.std, 0., 2.)
-            r = self.reward_function(p)
+            r, r_std = self.reward_function(p)
 
             if self.verbose:
-                print("INDIVIDUAL {} --> reward: {} \n\t\t PARAMS: {}".format(idx, r, p))
+                print("INDIVIDUAL {} --> reward: {} +- {} \n\t\t PARAMS: {}".format(idx, r, r_std, p))
 
             rewards.append(r)
             mean_reward += r
@@ -417,7 +443,7 @@ class EvolutionaryStrategiesOptimiser(object):
 
             # run the environment on the base parameters
             if i % self.base_run_rate == 0:
-                base_run = self.reward_function(self.params_base)
+                base_run, _ = self.reward_function(self.params_base)
                 # record cumulative mean reward of the base params
                 if self.culm_mean_reward_base == None:
                     self.culm_mean_reward_base = base_run
@@ -472,12 +498,12 @@ class EvolutionaryStrategiesOptimiser(object):
                 except:
                     print("FAILED TO SAVE PARTIAL STATS.")
 
-            # look at the last 10 updates and if they are within a std of 3, we have converged
-            if len(self.reward_hist_pop) > -0.1 and self.reward_hist_pop[-1] > -0.1:
-                std_10 = np.std(self.reward_hist_pop[-10:])
-                if std_10 <= 0.3:
-                    print("ENDED DUE TO CONVERGENCE.")
-                    break
+            # # look at the last 10 updates and if they are within a std of 3, we have converged
+            # if len(self.reward_hist_pop) > -0.1 and self.reward_hist_pop[-1] > -0.1:
+            #     std_10 = np.std(self.reward_hist_pop[-10:])
+            #     if std_10 <= 0.3:
+            #         print("ENDED DUE TO CONVERGENCE.")
+            #         break
 
 
 class Agent(object):
@@ -547,6 +573,7 @@ class Agent(object):
                         encoder_type='VAE')
             esn.initialize_input_weights(scales=weightin_params.tolist())
             esn.initialize_reservoir_weights(spectral_scales=spec_params.tolist(), sparsity=0.1)
+            # print(self.base_esn.regulariser)
         else: #ESN
             echo_params = params[0]
             spec_params = params[1]
@@ -600,11 +627,20 @@ class Agent(object):
 
             y_pred = np.array(y_pred).squeeze()
             y_vals = self.data_val[1].squeeze()
+            # print(np.hstack((y_pred[:, None], y_vals[:, None])))
             nr = nrmse(y_vals, y_pred, self.MEAN_OF_DATA)
             if nr > 1000000000: nr = 1000000000
             errors[run_num] = nr
 
-        return -np.mean(np.log(errors))
+        # for r in esn.reservoirs:
+        #     print("E:{}, S:{}, W:{}, REG:{}, SIZE:{},  SPARSE:{}".format(r.echo_param, r.spectral_scale, r.input_weights_scale, esn.regulariser, r.N, r.sparsity))
+
+        # plt.plot(range(len(y_pred)), y_pred, label="pred")
+        # plt.plot(range(len(y_vals)), y_vals, label="true")
+        # plt.legend()
+        # plt.show()
+
+        return -np.mean(np.log(errors)), np.std(np.log(errors))
         # Calculate reward =============================
         # failures = errors[np.where(errors >= 1.)[0]]
         # num_failures = len(failures)
@@ -635,15 +671,16 @@ class Agent(object):
 
 
 def RunES(episodes, name, population, std, learn_rate, 
-            data_train, data_val, MEAN_OF_DATA, base_esn):
+            data_train, data_val, MEAN_OF_DATA, base_esn,
+            params_base):
     '''
     Call this function to setup the 'agent' and the ES optimiser to then
     do the optimisation.
     '''
     agent = Agent(data_train, data_val, MEAN_OF_DATA, base_esn)
     e_op = EvolutionaryStrategiesOptimiser(
-        agent.run_episode, agent.num_params, agent.params_base,
-        population, std, learn_rate, verbose=False, num_resamples=2)
+        agent.run_episode, agent.num_params, params_base,
+        population, std, learn_rate, verbose=False, num_resamples=1)
 
     e_op.train(episodes, name)
 

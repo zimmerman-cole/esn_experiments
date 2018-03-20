@@ -52,6 +52,7 @@ class Reservoir(object):
         # These parameters are initialized upon calling initialize_input_weights()
         # and initialize_reservoir_weights().
         self.spectral_scale = None
+        self.sparsity = None
         self.W_res_init_strategy = None
         self.input_weights_scale = None
         self.W_in_init_strategy = None
@@ -99,7 +100,8 @@ class Reservoir(object):
             raise ValueError('unknown res. weight init strategy %s' % strategy)
 
         # apply the sparsity
-        sparsity_matrix = (np.random.rand(self.N, self.N) < sparsity).astype(float)
+        self.sparsity = sparsity
+        sparsity_matrix = (np.random.rand(self.N, self.N) < self.sparsity).astype(float)
         self.W_res *= sparsity_matrix
 
         self.W_res -= offset
@@ -230,7 +232,7 @@ class ESN(object):
     def reset_reservoir_states(self):
         self.reservoir.state = np.zeros(self.N)
 
-    def getInputSize(self): return self.K-1
+    def getInputSize(self): return self.K
 
     def getOutputSize(self): return self.L
 
@@ -536,7 +538,7 @@ class DHESN(LayeredESN):
             if i != self.num_reservoirs - 1:
                 encoder = self.encoders[i]
                 res_mean = np.mean(S_i, axis=0)
-                res_std = np.std(S_i, axis=0)
+                res_std = np.std(S_i, axis=0) + 1e-8
                 # print("MEAN: {}".format(res_mean))
                 # print("STD: {}".format(res_std))
                 # print(res_mean)

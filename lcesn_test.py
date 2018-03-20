@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from ESN.ESN import LCESN, ESN
+from ESN.ESN import LCESN, ESN, EESN
 from MackeyGlass.MackeyGlassGenerator import run
 from Helper.utils import nrmse
 import pickle as pkl
