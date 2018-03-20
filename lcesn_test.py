@@ -11,9 +11,9 @@ def mse(y1, y2):
     return np.mean((y1 - y2)**2)
                         
 if __name__ == '__main__':
-    data = np.array([run(21100)]).reshape(-1, 1)
+    data = np.array([run(15100)]).reshape(-1, 1)
     data_mean = np.mean(data, axis=0)
-    split = 20100
+    split = 14100
     X_train = np.array(data[:split-1])
     y_train = np.array(data[1:split])
     X_valid = np.array(data[split-1:-1])
@@ -76,11 +76,11 @@ if __name__ == '__main__':
 
             # GENERATIVE =================================================
             #u_n_ESN = data[split]
-            u_n_LCESN = data[split]
+            u_n_LCESN = np.array(X_valid[0])
             for _ in range(len(data[split:])):
                 #u_n_ESN = esn.forward(u_n_ESN)
                 #esn_outputs.append(u_n_ESN)
-                u_n_LCESN = lcesn.forward(u_n_LCESN)
+                u_n_LCESN = np.array(lcesn.forward(u_n_LCESN))
                 lcesn_outputs.append(u_n_LCESN)
 
             #esn_outputs = np.array(esn_outputs).squeeze()
