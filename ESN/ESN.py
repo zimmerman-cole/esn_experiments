@@ -389,6 +389,8 @@ class LayeredESN(object):
         out = """
         num_res: %d\nres_sizes:%s\necho_params:%s\ninput_scales:%s\nspectral_scales:%s
         """ % (self.num_reservoirs, self.reservoir_sizes, echo_prms, inp_scales, spec_scales)
+        out += 'regulariser: %f' % self.regulariser
+        return out
 
 class DHESN(LayeredESN):
 
