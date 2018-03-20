@@ -4,7 +4,7 @@ import pickle as pkl
 import time
 from abc import abstractmethod
 import matplotlib.pyplot as plt
-#from sklearn.decomposition import PCA
+from sklearn.decomposition import PCA
 
 import torch as th
 from torch.autograd import Variable
@@ -114,8 +114,14 @@ class Reservoir(object):
         u_n: K-dimensional input vector
         """
         u_n = u_n.squeeze()
-        assert (self.K == 1 and u_n.shape == ()) or u_n.shape[0] == self.W_in.shape[1], \
-            "u(n): %s.  W_res: %s (ID=%d)" % (u_n.shape, self.W_res.shape, self.idx)
+        try:
+            assert (self.K == 1 and u_n.shape == ()) or u_n.shape[0] == self.W_in.shape[1], \
+                "u(n): %s.  W_res: %s (ID=%d)" % (u_n.shape, self.W_res.shape, self.idx)
+        except:
+            print(u_n.shape)
+            print(self.W_in.shape)
+            print(self.W_res.shape)
+            raise
         assert self.ins_init, "Res. input weights not yet initialized (ID=%d)." % self.idx
         assert self.res_init, "Res. recurrent weights not yet initialized (ID=%d)." % self.idx
 
@@ -378,6 +384,13 @@ class LayeredESN(object):
 
     def getOutputSize(self): return self.L
 
+    def info(self):
+        inp_scales = [r.input_weights_scale for r in self.reservoirs]
+        spec_scales = [r.spectral_scale for r in self.reservoirs]
+        echo_prms = [r.echo_param for r in self.reservoirs]
+        out = """
+        num_res: %d\nres_sizes:%s\necho_params:%s\ninput_scales:%s\nspectral_scales:%s
+        """ % (self.num_reservoirs, self.reservoir_sizes, echo_prms, inp_scales, spec_scales)
 
 class DHESN(LayeredESN):
 
@@ -579,10 +592,9 @@ class LCESN(LayeredESN):
         self.reservoirs.append(Reservoir(self.K, reservoir_sizes[0], echo_params[0],
                                          idx=0, debug=self.debug))
         for i, (size, echo_prm) in enumerate(zip(reservoir_sizes, echo_params)[1:]):
-            print(i)
             self.reservoirs.append(Reservoir(
                 input_size=self.reservoirs[i].N, num_units=size, echo_param=echo_prm,
-                idx=i+1, debug=self.debug, activation=activation
+                idx=i+1, activation=activation, debug=self.debug
             ))
 
     def __forward_routing_rule__(self, u_n):

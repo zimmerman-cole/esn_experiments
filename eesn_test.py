@@ -43,7 +43,7 @@ if __name__ == '__main__':
     # echo_ranges = [(0.1, 0.8), (0.8, 0.1), (0.8, 0.8), (0.3, 0.5), (0.5, 0.9)]
     # spect_ranges = [(1.0, 1.5), (1.5, 1.0), (1.0, 1.25)]
 
-    EXPERIMENT_NAME = "VARIOUS_DHESN_WITH_200->50_VAE_ENCODE_2_"
+    EXPERIMENT_NAME = "VARIOUS_DHESN_WITH_PCA_2_"
 
     # eesn = ESN(1, 1, 5, reservoir_sizes=300, echo_params=[0.65388205, 0.28477042, 0.22879262, 0.12106287, 0.8],
     #             regulariser=1e-5, debug=True, activation=(lambda x: x))
@@ -70,18 +70,20 @@ if __name__ == '__main__':
     # print('EESN NRMSE: %f' % nrmse_err)
 
 
-    res_ranges = [(200, 10), (500, 100)]
-    echo_ranges = [(0.6, 0.1), (0.1, 0.6)]
-    weightin_ranges = [(0.6, 0.2), (0.2, 0.6), (0.2, 0.2)]
-    spect_ranges = [(1.3, 1.0), (1.5, 0.5)]
-    res_number_ranges = [3, 3]
+    res_ranges = [(300, 300), (500, 100), (100, 500), (200, 400)]
+    echo_ranges = [(0.85, 0.1), (0.5, 0.1), (0.1, 0.8), (0.4, 0.4)]
+    weightin_ranges = [(1.0, 0.5), (0.5, 1.0), (0.5, 0.5)]
+    spect_ranges = [(0.4, 1.2), (1.2, 0.4), (0.3, 0.9), (0.9, 0.3), (1.0, 0.7)]
+    d_reduce_ranges = [(60, 60), (100, 10), (10, 100), (30, 80)]
+    res_number_ranges = [5, 8]
+    regs = [1e-2, 1e-4, 1e-6]
     # num_res = 20
-    reg = 1e-2
+    # reg = 1e-6
 
-    num_samples = 20
+    num_samples = 3
 
-    data_samples = np.zeros((len(res_ranges)*len(echo_ranges)*len(spect_ranges)*len(res_number_ranges)*len(weightin_ranges), 1+2+2+2+2+1+1))
-    data_csv = np.zeros((len(res_ranges)*len(echo_ranges)*len(spect_ranges)*len(res_number_ranges)*len(weightin_ranges), 1+2+2+2+2+1+1))
+    data_samples = np.zeros((len(res_ranges)*len(echo_ranges)*len(spect_ranges)*len(res_number_ranges)*len(weightin_ranges)*len(d_reduce_ranges)*len(regs), 1+2+2+2+2+2+1+1+1))
+    data_csv = np.zeros((len(res_ranges)*len(echo_ranges)*len(spect_ranges)*len(res_number_ranges)*len(weightin_ranges)*len(d_reduce_ranges)*len(regs), 1+2+2+2+2+2+1+1+1))
     runs = 200 
     nrmses_d = []
     idx = 0
@@ -90,123 +92,146 @@ if __name__ == '__main__':
             for w in weightin_ranges:
                 for e in echo_ranges:
                     for s in spect_ranges:
-                        # r = (np.sqrt((1000**2)/n), np.sqrt((1000**2)/n))
-                        _reservoirs = np.round(np.linspace(r[0], r[1], n, endpoint=True).astype(int), 3)
-                        _echoes = np.round(np.linspace(e[0], e[1], n, endpoint=True), 3)
-                        _spectrals = np.round(np.linspace(s[0], s[1], n, endpoint=True), 3).tolist()
-                        _weightins = np.round(np.linspace(w[0], w[1], n, endpoint=True), 3).tolist()
-                        # _echoes = np.array([0.2618, 0.6311, 0.2868, 0.6311, 0.2868, 0.6311, 0.2868, 0.6311])
-                        # _spectrals = np.array([0.8896, 0.8948, 0.3782, 0.8948, 0.3782, 0.8948, 0.3782, 0.8948])
-                        # _weightins = np.array([0.7726, 0.4788, 0.6535, 0.4788, 0.6535, 0.4788, 0.6535, 0.4788])
-                        # _echoes = np.array([0.4, 0.4, 0.4, 0.4, 0.4])
-                        # _weightins = [0.2, 1.0, 1.0, 1.0, 1.0]
-                        # print(range(10, 100, n-1)[::-1])
-                        print("EXPERIMENT: \n\tRES: {}, \n\tECH: {}, \n\tSPEC: {}, \n\tWEIGHTIN: {} ({} to {})".format(_reservoirs, _echoes, _spectrals, _weightins, w[0], w[1]))
-                        eesn = LCESN(1, 1, n,
-                                    reservoir_sizes=_reservoirs, 
-                                    echo_params=_echoes, 
-                                    regulariser=reg, debug=True,
-                                    # activation=(lambda x: x*(x>0).astype(float)),
-                                    # activation=(lambda x: x),
-                                    init_echo_timesteps=100)#, dims_reduce=(np.linspace(200, 50, n-1).astype(int).tolist()),
-                                    # init_echo_timesteps=100, dims_reduce=(np.linspace(50, 200, n-1).astype(int).tolist()),
-                                    #encoder_type='VAE')
-                        eesn.initialize_input_weights(scales=_weightins, strategies='uniform')
-                        eesn.initialize_reservoir_weights(
-                                    spectral_scales=_spectrals,
-                                    strategies=['uniform']*n,
-                                    sparsity=0.1
-                                    )
-                        # eesn = ESN(1, 1, reservoir_size=1000,
-                        #             echo_param=0.85,
-                        #             regulariser=1e-5, debug=True,
-                        #             # activation=(lambda x: x*(x>0).astype(float)),
-                        #             # activation=(lambda x: x),
-                        #             init_echo_timesteps=100)
-                        #             # init_echo_timesteps=100, dims_reduce=(np.linspace(50, 200, n-1).astype(int).tolist()),
-                        # eesn.initialize_input_weights(scale=1.0)
-                        # #eesn.reservoir.W_in[:, -1] += MEAN_OF_DATA
-                        # eesn.initialize_reservoir_weights(
-                        #             spectral_scale=1.25,
-                        #             sparsity=1.0)
-                        eesn.train(X_train, y_train)
+                        for d in d_reduce_ranges:
+                            for reg in regs:
+                                _errors = []
+                                _reservoirs = np.round(np.linspace(r[0], r[1], n, endpoint=True).astype(int), 3)
+                                _echoes = np.round(np.linspace(e[0], e[1], n, endpoint=True), 3)
+                                _spectrals = np.round(np.linspace(s[0], s[1], n, endpoint=True), 3).tolist()
+                                _weightins = np.round(np.linspace(w[0], w[1], n, endpoint=True), 3).tolist()
+                                _dimsreduce = np.linspace(d[0], d[1], n-1).astype(int).tolist()
+                                # _echoes = np.array([0.2618, 0.6311, 0.2868, 0.6311, 0.2868, 0.6311, 0.2868, 0.6311])
+                                # _spectrals = np.array([0.8896, 0.8948, 0.3782, 0.8948, 0.3782, 0.8948, 0.3782, 0.8948])
+                                # _weightins = np.array([0.7726, 0.4788, 0.6535, 0.4788, 0.6535, 0.4788, 0.6535, 0.4788])
+                                # _echoes = np.array([0.4, 0.4, 0.4, 0.4, 0.4])
+                                # _weightins = [0.2, 1.0, 1.0, 1.0, 1.0]
+                                # print(range(10, 100, n-1)[::-1])
+                                print("EXPERIMENT: \n\tRES: {}, \n\tECH: {}, \n\tSPEC: {}, \n\tWEIGHTIN: {}, \n\tDIMREDUC: {}, \n\tREG: {}".format(
+                                                _reservoirs, _echoes, _spectrals, _weightins, _dimsreduce, reg))
+                                for l in range(num_samples):
+                                    # r = (np.sqrt((1000**2)/n), np.sqrt((1000**2)/n))
+                                    # _reservoirs = np.round(np.linspace(r[0], r[1], n, endpoint=True).astype(int), 3)
+                                    # _echoes = np.round(np.linspace(e[0], e[1], n, endpoint=True), 3)
+                                    # _spectrals = np.round(np.linspace(s[0], s[1], n, endpoint=True), 3).tolist()
+                                    # _weightins = np.round(np.linspace(w[0], w[1], n, endpoint=True), 3).tolist()
+                                    # _dimsreduce = np.linspace(d[0], d[1], n-1).astype(int).tolist()
+                                    # # _echoes = np.array([0.2618, 0.6311, 0.2868, 0.6311, 0.2868, 0.6311, 0.2868, 0.6311])
+                                    # # _spectrals = np.array([0.8896, 0.8948, 0.3782, 0.8948, 0.3782, 0.8948, 0.3782, 0.8948])
+                                    # # _weightins = np.array([0.7726, 0.4788, 0.6535, 0.4788, 0.6535, 0.4788, 0.6535, 0.4788])
+                                    # # _echoes = np.array([0.4, 0.4, 0.4, 0.4, 0.4])
+                                    # # _weightins = [0.2, 1.0, 1.0, 1.0, 1.0]
+                                    # # print(range(10, 100, n-1)[::-1])
+                                    # print("EXPERIMENT: \n\tRES: {}, \n\tECH: {}, \n\tSPEC: {}, \n\tWEIGHTIN: {}, \n\tDIMREDUC: {}, \n\tREG: {}".format(
+                                    #                 _reservoirs, _echoes, _spectrals, _weightins, _dimsreduce, reg))
+                                    eesn = DHESN(1, 1, n,
+                                                reservoir_sizes=_reservoirs, 
+                                                echo_params=_echoes, 
+                                                regulariser=reg, debug=True,
+                                                # activation=(lambda x: x*(x>0).astype(float)),
+                                                # activation=(lambda x: x),
+                                                init_echo_timesteps=100, dims_reduce=_dimsreduce,
+                                                # init_echo_timesteps=100, dims_reduce=(np.linspace(50, 200, n-1).astype(int).tolist()),
+                                                encoder_type='PCA')
+                                    eesn.initialize_input_weights(scales=_weightins, strategies='uniform')
+                                    eesn.initialize_reservoir_weights(
+                                                spectral_scales=_spectrals,
+                                                strategies=['uniform']*n,
+                                                sparsity=0.1
+                                                )
+                                    # eesn = ESN(1, 1, reservoir_size=1000,
+                                    #             echo_param=0.85,
+                                    #             regulariser=1e-5, debug=True,
+                                    #             # activation=(lambda x: x*(x>0).astype(float)),
+                                    #             # activation=(lambda x: x),
+                                    #             init_echo_timesteps=100)
+                                    #             # init_echo_timesteps=100, dims_reduce=(np.linspace(50, 200, n-1).astype(int).tolist()),
+                                    # eesn.initialize_input_weights(scale=1.0)
+                                    # #eesn.reservoir.W_in[:, -1] += MEAN_OF_DATA
+                                    # eesn.initialize_reservoir_weights(
+                                    #             spectral_scale=1.25,
+                                    #             sparsity=1.0)
+                                    eesn.train(X_train, y_train)
 
-                        eesn_outputs = []
+                                    eesn_outputs = []
 
-                        # GENERATIVE =================================================
-                        # u_n_EESN = data[split-1]
-                        u_n_EESN = X_valid[0]
-                        for _ in range(len(data[split:])):
-                            u_n_EESN = eesn.forward(u_n_EESN)
-                            eesn_outputs.append(u_n_EESN)
+                                    # GENERATIVE =================================================
+                                    # u_n_EESN = data[split-1]
+                                    u_n_EESN = X_valid[0]
+                                    for _ in range(len(data[split:])):
+                                        u_n_EESN = eesn.forward(u_n_EESN)
+                                        eesn_outputs.append(u_n_EESN)
 
-                        # SUPERVISED ====
-                        # for u_n in X_valid:
-                        #     esn_outputs.append(esn.forward(u_n))
-                        #     lcesn_outputs.append(lcesn.forward(u_n))
-                        # ============================================================
+                                    # SUPERVISED ====
+                                    # for u_n in X_valid:
+                                    #     esn_outputs.append(esn.forward(u_n))
+                                    #     lcesn_outputs.append(lcesn.forward(u_n))
+                                    # ============================================================
 
-                        # esn_outputs = np.array(esn_outputs).squeeze()
-                        eesn_outputs = np.array(eesn_outputs).squeeze()
-                        y_vals = y_valid.squeeze()
-                        # print(np.shape(eesn_outputs))
-                        # print(np.shape(y_vals))
-                        # print(np.vstack((eesn_outputs, y_vals)))
+                                    # esn_outputs = np.array(esn_outputs).squeeze()
+                                    eesn_outputs = np.array(eesn_outputs).squeeze()
+                                    y_vals = y_valid.squeeze()
+                                    # print(np.shape(eesn_outputs))
+                                    # print(np.shape(y_vals))
+                                    # print(np.vstack((eesn_outputs, y_vals)))
 
-                        # print('  ESN MSE: %f' % mse(y_valid, esn_outputs))
-                        # print('EESN MSE: %f' % mse(y_valid, eesn_outputs))
-                        nrmse_err = nrmse(y_vals, eesn_outputs, MEAN_OF_DATA)
-                        print('DHESN NRMSE: %f' % nrmse_err)
-                        print('-log(NRMSE): %f' % -np.log(nrmse_err))
+                                    # print('  ESN MSE: %f' % mse(y_valid, esn_outputs))
+                                    # print('EESN MSE: %f' % mse(y_valid, eesn_outputs))
+                                    nrmse_err = nrmse(y_vals, eesn_outputs, MEAN_OF_DATA)
+                                    print('DHESN NRMSE: %f' % nrmse_err)
+                                    print('-log(NRMSE): %f' % -np.log(nrmse_err))
+                                    if nrmse_err > 100000:
+                                        nrmse_err = 100000
+                                    _errors.append(nrmse_err)
+                                    # plt.plot(range(len(eesn_outputs)), eesn_outputs, label="predicted")
+                                    # plt.plot(range(len(y_vals)), y_vals, label="true")
+                                    # plt.legend()
+                                    # plt.show()
 
-                        # plt.plot(range(len(eesn_outputs)), eesn_outputs, label="predicted")
-                        # plt.plot(range(len(y_vals)), y_vals, label="true")
-                        # plt.legend()
-                        # plt.show()
+                                    # we = eesn.W_out.squeeze()
+                                    # plt.bar(range(len(we)), we)
+                                    # plt.show()
 
-                        # we = eesn.W_out.squeeze()
-                        # plt.bar(range(len(we)), we)
-                        # plt.show()
-
-                        data_csv[idx, 0] = n
-                        data_csv[idx, 1:3] = r
-                        data_csv[idx, 3:5] = e
-                        data_csv[idx, 5:7] = s
-                        data_csv[idx, 7:9] = w
-                        data_csv[idx, 9] = reg
-                        data_csv[idx, 10] = nrmse_err
-                        idx += 1
+                                data_csv[idx, 0] = n
+                                data_csv[idx, 1:3] = r
+                                data_csv[idx, 3:5] = e
+                                data_csv[idx, 5:7] = s
+                                data_csv[idx, 7:9] = w
+                                data_csv[idx, 9:11] = d
+                                data_csv[idx, 11] = reg
+                                data_csv[idx, 12] = np.mean(_errors)
+                                data_csv[idx, 13] = np.std(_errors)
+                                idx += 1
     
-    font = {'family' : 'normal',
-        # 'weight' : 'bold',
-        'size'   : 22}
-    plt.rc('font', **font)
-    plt.rc('legend', fontsize=10)
+    # font = {'family' : 'normal',
+    #     # 'weight' : 'bold',
+    #     'size'   : 22}
+    # plt.rc('font', **font)
+    # plt.rc('legend', fontsize=10)
 
-    colors = ['red', 'blue', 'green', 'purple', 'yellow', 'orange', 'black', 'brown']
-    fig1, ax1 = plt.subplots()
-    fig2, ax2 = plt.subplots()
-    for i, e in enumerate(eesn.encoders):
-        s = e.sample()
-        a = e.avg_loss_history
-        # print("sample {}: {}".format(i, s))
-        ax1.plot(range(len(s)), s - i*3, color=colors[i], label='VAE {}'.format(i))
-        ax2.plot(range(len(a)), a, color=colors[i], label='VAE {}'.format(i))
-    ax1.legend()
-    ax1.set_xlabel("sampled unit Guassian")
-    ax1.set_ylabel("latent variables")
-    ax2.legend()
-    ax2.set_xlabel("epoch")
-    ax2.set_ylabel("avg. MSE loss")
+    # colors = ['red', 'blue', 'green', 'purple', 'yellow', 'orange', 'black', 'brown']
+    # fig1, ax1 = plt.subplots()
+    # fig2, ax2 = plt.subplots()
+    # for i, e in enumerate(eesn.encoders):
+    #     s = e.sample()
+    #     a = e.avg_loss_history
+    #     # print("sample {}: {}".format(i, s))
+    #     ax1.plot(range(len(s)), s - i*3, color=colors[i], label='VAE {}'.format(i))
+    #     ax2.plot(range(len(a)), a, color=colors[i], label='VAE {}'.format(i))
+    # ax1.legend()
+    # ax1.set_xlabel("sampled unit Guassian")
+    # ax1.set_ylabel("latent variables")
+    # ax2.legend()
+    # ax2.set_xlabel("epoch")
+    # ax2.set_ylabel("avg. MSE loss")
 
-    fig3, ax3 = plt.subplots()
+    # fig3, ax3 = plt.subplots()
     # hist, bins = np.histogram(eesn.W_out, bins=50)
     # centres = (bins[1:]+bins[:-1])/2.
     # width = (bins[1] - bins[0])*0.9
-    print(np.shape(eesn.W_out))
-    ax3.bar(range(len(eesn.W_out.squeeze())), eesn.W_out.squeeze(), width=0.8)
+    # print(np.shape(eesn.W_out))
+    # ax3.bar(range(len(eesn.W_out.squeeze())), eesn.W_out.squeeze(), width=0.8)
 
-    plt.show()
+    # plt.show()
 
     # plt.plot(range(len(X_train)), X_train, label="XTRAIN")
     # plt.plot(range(len(y_train)), y_train, label="yTRAIN")
@@ -217,9 +242,9 @@ if __name__ == '__main__':
     # save the data
     file_name = 'DHESN_RESULTS/DHESN_data_{}_{}.csv'.format(EXPERIMENT_NAME, datetime.date.today())
     np.savetxt(file_name, data_csv, delimiter=',', 
-                fmt=['%d', '%d', '%d', '%.3f', '%.3f', '%.3f', '%.3f', '%.3f', '%.3f', '%.2e', '%.4f'],
+                fmt=['%d', '%d', '%d', '%.3f', '%.3f', '%.3f', '%.3f', '%.3f', '%.3f', '%.3f', '%.3f', '%.2e', '%.4f', '%.6e'],
                 header='No. res, res sizes (min), (max), echo values (min), (max), '+
-                'spectral values (min), (max), weightin (min), (max), reg., NRMSE')
+                'spectral values (min), (max), weightin (min), (max), dimsrec (min), (max), reg., NRMSE (mean), (std)')
 
     if 0:
         f, ax = plt.subplots(figsize=(12, 12))
