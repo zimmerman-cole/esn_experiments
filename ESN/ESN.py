@@ -55,6 +55,7 @@ class Reservoir(object):
         self.W_res_init_strategy = None
         self.input_weights_scale = None
         self.W_in_init_strategy = None
+        self.sparsity = None
 
         # helpful information to track
         if self.debug:
@@ -87,6 +88,7 @@ class Reservoir(object):
                                      sparsity=1.0):
         self.spectral_scale = spectral_scale
         self.W_res_init_strategy = strategy
+        self.sparsity = sparsity
         if strategy == 'binary':
             self.W_res = (np.random.rand(self.N, self.N) > 0.5).astype(float)
         elif strategy == 'uniform':
@@ -159,6 +161,17 @@ class ESN(object):
         self.debug = debug
 
         self.W_out = np.ones((self.L, self.K+self.N))   # output weights
+
+    def info(self):
+        r_size = self.reservoir.N
+        e_prm = self.reservoir.echo_param
+        i_scl = self.reservoir.input_weights_scale
+        s_scl = self.reservoir.spectral_scale
+        sp = self.reservoir.sparsity
+        reg = self.regulariser
+        out = 'r_size:%d\ne_prm:%f\ni_scl:%f\ns_scl:%f\nsp:%f\nreg:%f' % \
+                (r_size, e_prm, i_scl, s_scl, sp, reg)
+        return out
 
     def initialize_input_weights(self, strategy='binary', scale=1e-2):
         self.reservoir.initialize_input_weights(strategy, scale)
