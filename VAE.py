@@ -130,8 +130,8 @@ class VAE(nn.Module):
                     100. * batch_idx / len(train_data),
                     loss.data[0] / len(data)))
 
-        print('====> Epoch: {} Average loss: {:.8f}'.format(
-            epoch_idx, train_loss / len(train_data)))
+        # print('====> Epoch: {} Average loss: {:.8f}'.format(
+        #     epoch_idx, train_loss / len(train_data)))
             # epoch, train_loss / len(self.train_data.dataset)))
         self.avg_loss_history.append(train_loss / len(train_data))
 

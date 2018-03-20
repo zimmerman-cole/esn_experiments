@@ -5,7 +5,7 @@ import pickle as pkl
 import datetime
 import time
 
-from ESN.ESN import LayeredESN, LCESN, EESN, ESN
+from ESN.ESN import LayeredESN, LCESN, EESN, ESN, DHESN
 from Helper.utils import nrmse, LivePlotHistogram, LiveDataGraph
 
 MAX_REWARD = 1000000
@@ -34,7 +34,8 @@ class GeneticAlgorithm(object):
         self.num_resamples = num_resamples
         self.population = population * self.num_resamples     # number of individuals in one population
         self.individuals = np.clip(np.random.randn(self.population, self.num_params)*0.1 +
-        np.array([0.85, 1.25, 1.0]), 0, 1.5) # the population, itself
+        #np.array([0.85, 1.25, 1.0]), 0, 1.5) # the population, itself
+        params_base, 0, 1.5)
         self.individuals_fitness = np.zeros(self.population)  # the fitness of each member of the population
 
         self.culm_mean_reward = None
@@ -487,7 +488,7 @@ class Agent(object):
         data_val : (X, y)
         base_esn : ESN to run the ES on
         '''
-        assert isinstance(base_esn, EESN) or isinstance(base_esn, LCESN) or isinstance(base_esn, ESN), "bad ESN type of {}".format(type(base_esn))
+        assert isinstance(base_esn, EESN) or isinstance(base_esn, LCESN) or isinstance(base_esn, ESN) or isinstance(base_esn, DHESN), "bad ESN type of {}".format(type(base_esn))
 
         self.data_train = data_train
         self.data_val = data_val
@@ -532,6 +533,20 @@ class Agent(object):
                         init_echo_timesteps=self.base_esn.init_echo_timesteps, regulariser=self.base_esn.regulariser, debug=self.base_esn.debug)
             esn.initialize_input_weights(scales=weightin_params.tolist())
             esn.initialize_reservoir_weights(spectral_scales=spec_params.tolist())
+        elif isinstance(self.base_esn, DHESN):
+            echo_params = params[:self.base_esn.num_reservoirs]
+            spec_params = params[self.base_esn.num_reservoirs:self.base_esn.num_reservoirs*2]
+            weightin_params = params[self.base_esn.num_reservoirs*2:]
+            esn = DHESN(input_size=self.base_esn.getInputSize(), output_size=self.base_esn.getOutputSize(), num_reservoirs=self.base_esn.num_reservoirs,
+                        reservoir_sizes=self.base_esn.reservoir_sizes, echo_params=echo_params, #self.base_esn.output_activation,
+                        init_echo_timesteps=self.base_esn.init_echo_timesteps, 
+                        regulariser=self.base_esn.regulariser, 
+                        debug=self.base_esn.debug,
+                        dims_reduce=(np.linspace(200, 50, len(self.base_esn.encoders)).astype(int).tolist()),
+                # init_echo_timesteps=100, dims_reduce=(np.linspace(50, 200, n-1).astype(int).tolist()),
+                        encoder_type='VAE')
+            esn.initialize_input_weights(scales=weightin_params.tolist())
+            esn.initialize_reservoir_weights(spectral_scales=spec_params.tolist(), sparsity=0.1)
         else: #ESN
             echo_params = params[0]
             spec_params = params[1]
@@ -641,7 +656,7 @@ def RunES(episodes, name, population, std, learn_rate,
 
     return e_op.reward_hist_pop
 
-def RunGA(episodes, name, population, data_train, data_val, MEAN_OF_DATA, base_esn, verbose=False):
+def RunGA(episodes, name, population, data_train, data_val, MEAN_OF_DATA, base_esn, params_base, verbose=False):
     '''
     Call this function to setup the 'agent' and the GA optimiser to then
     do the optimisation.
@@ -649,7 +664,8 @@ def RunGA(episodes, name, population, data_train, data_val, MEAN_OF_DATA, base_e
     name = "Results/"+name
     agent = Agent(data_train, data_val, MEAN_OF_DATA, base_esn)
     ga_op = GeneticAlgorithm(
-        reward_function=agent.run_episode, num_params=agent.num_params,
+        reward_function=agent.run_episode, 
+        num_params=agent.num_params, params_base=params_base,
         population=population, verbose=True, num_resamples=1)
 
     ga_op.train(episodes, name)

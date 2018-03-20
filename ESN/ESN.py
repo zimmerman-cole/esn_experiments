@@ -112,8 +112,14 @@ class Reservoir(object):
         u_n: K-dimensional input vector
         """
         u_n = u_n.squeeze()
-        assert (self.K == 1 and u_n.shape == ()) or u_n.shape[0] == self.W_in.shape[1], \
-            "u(n): %s.  W_res: %s (ID=%d)" % (u_n.shape, self.W_res.shape, self.idx)
+        try:
+            assert (self.K == 1 and u_n.shape == ()) or u_n.shape[0] == self.W_in.shape[1], \
+                "u(n): %s.  W_res: %s (ID=%d)" % (u_n.shape, self.W_res.shape, self.idx)
+        except:
+            print(u_n.shape)
+            print(self.W_in.shape)
+            print(self.W_res.shape)
+            raise
         assert self.ins_init, "Res. input weights not yet initialized (ID=%d)." % self.idx
         assert self.res_init, "Res. recurrent weights not yet initialized (ID=%d)." % self.idx
 
@@ -139,11 +145,11 @@ class ESN(object):
         if output_activation is not None:
             raise NotImplementedError('non-identity output activations not implemented.')
         # ========================================================================
-        self.reservoir = Reservoir(input_size=input_size, num_units=reservoir_size, 
-                                    echo_param=echo_param, activation=activation, debug=debug)
         self.K = input_size
         self.N = reservoir_size
         self.L = output_size
+        self.reservoir = Reservoir(input_size=self.K, num_units=self.N, 
+                                    echo_param=echo_param, activation=activation, debug=debug)
         if output_activation is None:
             def iden(x): return x
             output_activation = iden    # <- identity
@@ -161,12 +167,15 @@ class ESN(object):
                                      sparsity=1.0):
         self.reservoir.initialize_reservoir_weights(strategy, spectral_scale, offset, sparsity)
 
-    def forward(self, u_n):
+    def forward(self, u_n, add_bias=True):
         u_n = u_n.squeeze()
-        assert (self.K == 1 and u_n.shape == ()) or len(u_n) == self.K
+
+        assert (self.K == 1 and u_n.shape == ()) or len(u_n) == self.K, "unexpected input dimensionality (check bias)"
 
         x_n = self.reservoir.forward(u_n)  # reservoir states at time n
         z_n = np.append(x_n, u_n)          # extended system states at time n
+        if add_bias:
+            z_n = np.hstack((z_n, 1)) 
 
         # by default, output activation is identity
         # output = self.output_activation(np.dot(z_n, self.W_out.T))
@@ -174,7 +183,7 @@ class ESN(object):
 
         return output.squeeze()
 
-    def train(self, X, y):
+    def train(self, X, y, add_bias=True):
         assert X.shape[1] == self.K, "training data has unexpected dimensionality (%s); K = %d" % (X.shape, self.K)
         X = X.reshape(-1, self.K)
         y = y.reshape(-1, self.L)
@@ -196,15 +205,19 @@ class ESN(object):
             S[n, :] = z_n
         if self.debug: print('-'*10+'Extended system states collected.'+'-'*10)
 
+        if add_bias:
+            S = np.hstack([S, np.ones((S.shape[0], 1))])
         # Solve (W_out)(S.T) = (D) by least squares
         T1 = np.dot(D.T, S)                                                       # L     x (N+K)
-        T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye(self.K + self.N))  # (N+K) x (N+K)
+        reg = self.regulariser * np.eye(self.K + self.N+1)
+        reg[-1, -1] = 0
+        T2 = la.inv(np.dot(S.T, S) + reg)  # (N+K) x (N+K)
         self.W_out = np.dot(T1, T2)                                               # L     x (N+K)
         
     def reset_reservoir_states(self):
         self.reservoir.state = np.zeros(self.N)
 
-    def getInputSize(self): return self.K
+    def getInputSize(self): return self.K-1
 
     def getOutputSize(self): return self.L
 
@@ -311,16 +324,20 @@ class LayeredESN(object):
     def __reservoir_input_size_rule__(self, *args):
         pass
 
-    def forward(self, u_n, calculate_output=True):
+    def forward(self, u_n, calculate_output=True, add_bias=True):
         """
         Forward-propagate signal through network.
         If calculate_output = True: returns output signal, y_n.
                               else: returns updated system states, x_n.
         """
         u_n = u_n.squeeze()
-        assert (self.K == 1 and u_n.shape == ()) or len(u_n) == self.K
+
+        assert (self.K == 1 and u_n.shape == ()) or  len(u_n) == self.K
 
         x_n = self.__forward_routing_rule__(u_n)
+
+        if add_bias:
+            u_n = np.hstack((u_n, 1))
 
         if calculate_output:
             z_n = np.append(x_n, u_n)
@@ -329,7 +346,8 @@ class LayeredESN(object):
         else:
             return x_n
 
-    def train(self, X, y):
+    def train(self, X, y, add_bias=True):
+
         assert X.shape[1] == self.K, "Training data has unexpected dimensionality (%s). K = %d." % (X.shape, self.K)
         X = X.reshape(-1, self.K)
         y = y.reshape(-1, self.L)
@@ -337,20 +355,23 @@ class LayeredESN(object):
         # First, run a few inputs into the reservoir to get it echoing
         initial_data = X[:self.init_echo_timesteps]
         for u_n in initial_data:
-            _ = self.forward(u_n, calculate_output=False)
+            _ = self.forward(u_n, calculate_output=False, add_bias=False)
 
         # Now train the output weights
         X_train = X[self.init_echo_timesteps:]
         D = y[self.init_echo_timesteps:]
         S = np.zeros((X_train.shape[0], self.N+self.K))
         for n, u_n in enumerate(X_train):
-            x_n = self.forward(u_n, calculate_output=False)
+            x_n = self.forward(u_n, calculate_output=False, add_bias=False)
             z_n = np.append(x_n, u_n)
             S[n, :] = z_n
 
+        if add_bias:
+            S = np.hstack([S, np.ones((S.shape[0], 1))])
+
         # Solve linear system
         T1 = np.dot(D.T, S)
-        T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye(self.K + self.N))
+        T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye(self.K + self.N+1))
         self.W_out = np.dot(T1, T2)
         
     def reset_reservoir_states(self):
@@ -361,6 +382,13 @@ class LayeredESN(object):
 
     def getOutputSize(self): return self.L
 
+    def info(self):
+        inp_scales = [r.input_weights_scale for r in self.reservoirs]
+        spec_scales = [r.spectral_scale for r in self.reservoirs]
+        echo_prms = [r.echo_param for r in self.reservoirs]
+        out = """
+        num_res: %d\nres_sizes:%s\necho_params:%s\ninput_scales:%s\nspectral_scales:%s
+        """ % (self.num_reservoirs, self.reservoir_sizes, echo_prms, inp_scales, spec_scales)
 
 class DHESN(LayeredESN):
 
@@ -377,7 +405,7 @@ class DHESN(LayeredESN):
         
         super(DHESN, self).__init__(*args, **kwargs)
         
-        print(self.dims_reduce)
+        # print(self.dims_reduce)
         self.data_mean = None
         self.reservoir_means = [
             np.zeros(N_i) for N_i in self.reservoir_sizes
@@ -438,22 +466,22 @@ class DHESN(LayeredESN):
 
         return x_n
 
-    def train(self, X, y, debug_info=False):
+    def train(self, X, y, debug_info=False, add_bias=True):
         """ (needs different train() because reservoirs+encoders have to be warmed up+trained one at a time."""
         assert X.shape[1] == self.K, "Training data has unexpected dimensionality (%s). K = %d." % (X.shape, self.K)
         X = X.reshape(-1, self.K)
         y = y.reshape(-1, self.L)
         #assert self.encoder_type != 'PCA' or np.mean(X) < 1e-3, "Input data must be zero-mean to use PCA encoding."
-        print("X mean: {}, y mean: {}".format(np.mean(X, axis=0), np.mean(y, axis=0)))
+        # print("X mean: {}, y mean: {}".format(np.mean(X, axis=0), np.mean(y, axis=0)))
         self.data_mean = np.mean(X, axis=0)[0]
         # plt.plot(range(np.shape(X)[0]), X, label="before")
-        print("mean: {}".format(self.data_mean))
+        # print("mean: {}".format(self.data_mean))
         # print(np.shape(X))
         # print(np.shape(y))
         # print(np.shape(self.data_mean))
         # X -= self.data_mean
         # y -= self.data_mean
-        print("X mean: {}, y mean: {}".format(np.mean(X, axis=0), np.mean(y, axis=0)))
+        # print("X mean: {}, y mean: {}".format(np.mean(X, axis=0), np.mean(y, axis=0)))
         # plt.plot(range(np.shape(X)[0]), X, label="after")
         # plt.show()
 
@@ -522,9 +550,9 @@ class DHESN(LayeredESN):
             # rest are the next inputs
             inputs = S_i[self.init_echo_timesteps:, :]
 
-            print(np.shape(inputs))
-            print(np.shape(S_i))
-            print(np.shape(S))
+            # print(np.shape(inputs))
+            # print(np.shape(S_i))
+            # print(np.shape(S))
             lb, ub = delim[i], delim[i+1]
             S[:, lb:ub] = S_i[(self.init_echo_timesteps*(self.num_reservoirs-i-1)):, :]
 
@@ -533,11 +561,14 @@ class DHESN(LayeredESN):
             if debug_info:
                 print('res %d mean state magnitude: %.4f' % (i, np.mean(np.abs(S_i))))
 
+        if add_bias:
+            S = np.hstack([S, np.ones((S.shape[0], 1))])
+
         D = y[self.init_echo_timesteps*self.num_reservoirs:]
         # Solve linear system
         T1 = np.dot(D.T, S)
         # T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye(self.K + self.N))
-        T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye(np.sum(self.dims_reduce)+self.K+self.reservoirs[-1].N))
+        T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye(np.sum(self.dims_reduce)+self.K+self.reservoirs[-1].N+1))
         self.W_out = np.dot(T1, T2)
 
     @property
@@ -560,7 +591,7 @@ class LCESN(LayeredESN):
                                          idx=0, debug=self.debug))
         for i, (size, echo_prm) in enumerate(zip(reservoir_sizes, echo_params)[1:]):
             self.reservoirs.append(Reservoir(
-                input_size=self.reservoirs[i-1].N, num_units=size, echo_param=echo_prm,
+                input_size=self.reservoirs[i].N, num_units=size, echo_param=echo_prm,
                 idx=i+1, activation=activation, debug=self.debug
             ))
 
