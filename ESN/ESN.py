@@ -547,7 +547,7 @@ class DHESN(LayeredESN):
                 # S_i -= res_mean
                 # Now train the encoder using the gathered state data
                 if self.encoder_type == 'PCA':
-                    encoder.fit(S_i)
+                    encoder.fit(S_i)  # sklearn PCA automatically zero-means the data
                     S_i = encoder.transform(S_i)
                 elif self.encoder_type == 'VAE':
                     # print(S_i[:3])
