@@ -401,6 +401,12 @@ class DHESN(LayeredESN):
         self.dims_reduce = kwargs['dims_reduce']
         del kwargs['dims_reduce']
 
+        if 'train_epochs' not in kwargs.keys():
+            self.train_epochs = 2 # should make this specific to only VAEs but being quick for now
+        else:
+            self.train_epochs = kwargs['train_epochs']
+            del kwargs['train_epochs']
+
         if 'encoder_type' not in kwargs.keys():
             self.encoder_type = 'PCA'
         else:
