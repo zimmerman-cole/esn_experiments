@@ -1,6 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
-from ESN.ESN import LCESN, ESN, EESN
+from ESN.ESN import EESN, ESN
 from MackeyGlass.MackeyGlassGenerator import run
 from Helper.utils import nrmse
 import pickle as pkl
@@ -41,6 +41,7 @@ if __name__ == '__main__':
         np.linspace(0.2, 1.0, num_reservoirs), np.linspace(1.0, 0.2, num_reservoirs)
     ]
     reservoir_sizes_ = [
+        np.linspace(10, 500, num_reservoirs).astype(int),
         np.linspace(200, 200, num_reservoirs).astype(int),
         np.linspace(100, 200, num_reservoirs).astype(int),
         np.linspace(50, 250, num_reservoirs).astype(int)
@@ -61,36 +62,36 @@ if __name__ == '__main__':
         print('res_sizes', reservoir_sizes)
 
         for _ in range(3):
-            lcesn = LCESN(
+            eesn = EESN(
                 1, 1, num_reservoirs, reservoir_sizes=reservoir_sizes, echo_params=echo_params, 
                 regulariser=regulariser, debug=True
             )
-            lcesn.initialize_input_weights(scales=input_scales)
-            lcesn.initialize_reservoir_weights(spectral_scales=spectral_scales)
+            eesn.initialize_input_weights(scales=input_scales)
+            eesn.initialize_reservoir_weights(spectral_scales=spectral_scales)
 
             #esn.train(X_train, y_train)
-            lcesn.train(X_train, y_train)
+            eesn.train(X_train, y_train)
 
             #esn_outputs = []
-            lcesn_outputs = []
+            eesn_outputs = []
 
             # GENERATIVE =================================================
             #u_n_ESN = data[split]
-            u_n_LCESN = np.array(X_valid[0])
+            u_n_EESN = np.array(X_valid[0])
             for _ in range(len(data[split:])):
                 #u_n_ESN = esn.forward(u_n_ESN)
                 #esn_outputs.append(u_n_ESN)
-                u_n_LCESN = np.array(lcesn.forward(u_n_LCESN))
-                lcesn_outputs.append(u_n_LCESN)
+                u_n_EESN = eesn.forward(u_n_EESN)
+                eesn_outputs.append(u_n_EESN)
 
             #esn_outputs = np.array(esn_outputs).squeeze()
-            lcesn_outputs = np.array(lcesn_outputs).squeeze()
+            eesn_outputs = np.array(eesn_outputs).squeeze()
 
-            error = nrmse(y_valid, lcesn_outputs, data_mean)
+            error = nrmse(y_valid, eesn_outputs, data_mean)
             #print('  ESN MSE: %f' % mse(y_valid, esn_outputs))
-            print('LCESN NRMSE: %f' % error)
+            print('EESN NRMSE: %f' % error)
 
-            key = lcesn.info()
+            key = eesn.info()
             if key not in to_save.keys():
                 to_save[key] = []
             to_save[key].append(error)
@@ -98,12 +99,12 @@ if __name__ == '__main__':
             if 0:
                 f, ax = plt.subplots(figsize=(12, 12))
                 #ax.plot(range(len(esn_outputs)), esn_outputs, label='ESN')
-                ax.plot(range(len(lcesn_outputs)), lcesn_outputs, label='LCESN')
+                ax.plot(range(len(eesn_outputs)), eesn_outputs, label='EESN')
                 ax.plot(range(len(y_valid)), y_valid, label='True')
                 plt.legend()
                 plt.show()
 
-                #for res in lcesn.reservoirs:
+                #for res in eesn.reservoirs:
                 #    all_signals = np.array(res.signals).squeeze()[:100, :5].T
 
                 #    f, ax = plt.subplots()
@@ -115,8 +116,8 @@ if __name__ == '__main__':
 
             if 0:
                 f, ax = plt.subplots(figsize=(12, 12))
-                w = lcesn.W_out.squeeze()
+                w = eesn.W_out.squeeze()
                 ax.bar(range(len(w)), w)
                 plt.show()
 
-            pkl.dump(to_save, open('Results/LCESN/%s.p' % title, 'wb'))
+            pkl.dump(to_save, open('Results/EESN/%s.p' % title, 'wb'))
