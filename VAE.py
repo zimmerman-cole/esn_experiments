@@ -43,7 +43,7 @@ import numpy as np
 
 class VAE(nn.Module):
     def __init__(self, input_size, hidden_size=None, latent_variable_size=5,
-                    log_interval=2, batch_size=32, epochs=3):
+                    log_interval=2, batch_size=128, epochs=3):
         super(VAE, self).__init__()
 
         self.input_size = input_size
@@ -141,16 +141,16 @@ class VAE(nn.Module):
             data = Variable(data, volatile=True)
             recon_batch, mu, logvar = self(data)
             test_loss += self.loss_function(recon_batch, data, mu, logvar).data[0]
-            if i == 0:
-                n = min(data.size(0), 8)
-                comparison = torch.cat([data[:n],
-                                    recon_batch.view(self.batch_size, 1, 28, 28)[:n]])
-                save_image(comparison.data,
-                        'results/reconstruction_' + str(epoch_idx) + '.png', nrow=n)
+            #if i == 0:
+                #n = min(data.size(0), 8)
+                #comparison = torch.cat([data[:n],
+                                    #recon_batch.view(self.batch_size, 1, 28, 28)[:n]])
+                ##save_image(comparison.data,
+                        #'results/reconstruction_' + str(epoch_idx) + '.png', nrow=n)
 
         # test_loss /= len(self.test_data.dataset)
         test_loss /= len(test_data)
-        print('====> Test set loss: {:.4f}'.format(test_loss))
+        print('====> {} Test set loss: {:.4f}'.format(epoch_idx, test_loss))
     
     def train_full(self, train_data, test_data=None, verbose=False):
         # normalise the data before putting it into the ENCODER

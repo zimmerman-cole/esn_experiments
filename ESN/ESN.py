@@ -305,7 +305,7 @@ class LayeredESN(object):
         self.N = sum(reservoir_sizes)
         self.W_out = np.ones((self.L, self.K+self.N))
 
-    def initialize_input_weights(self, strategies='binary', scales=1e-2, offsets=0.5):
+    def initialize_input_weights(self, strategies='binary', scales=2e-2, offsets=0.5, sparsity=1.0):
         if type(strategies) not in [list, np.ndarray]:
             strategies = [strategies]*self.num_reservoirs
         if type(scales) not in [list, np.ndarray]:
@@ -314,7 +314,7 @@ class LayeredESN(object):
             offsets = [offsets]*self.num_reservoirs
 
         for i, (strat, scale) in enumerate(zip(strategies, scales)):
-            self.reservoirs[i].initialize_input_weights(strategy=strat, scale=scale)
+            self.reservoirs[i].initialize_input_weights(strategy=strat, scale=scale, sparsity=sparsity)
 
     def initialize_reservoir_weights(self, strategies='uniform', spectral_scales=1.0, offsets=0.5, sparsity=1.0):
         if type(strategies) not in [list, np.ndarray]:
@@ -424,6 +424,12 @@ class DHESN(LayeredESN):
             self.train_epochs = kwargs['train_epochs']
             del kwargs['train_epochs']
 
+        if 'train_batches' not in kwargs.keys():
+            self.train_batches = 64 # should make this specific to only VAEs but being quick for now
+        else:
+            self.train_batches = kwargs['train_batches']
+            del kwargs['train_batches']
+
         if 'encoder_type' not in kwargs.keys():
             self.encoder_type = 'PCA'
         else:
@@ -464,7 +470,7 @@ class DHESN(LayeredESN):
         elif self.encoder_type == 'VAE':
             for j in range(1, self.num_reservoirs):
                 self.encoders.append(VAE(input_size=self.reservoir_sizes[j-1], latent_variable_size=self.dims_reduce[j-1],
-                                            epochs=2, batch_size=32))
+                                            epochs=self.train_epochs*j, batch_size=self.train_batches))
         else:
             raise NotImplementedError('non-PCA/VAE encodings not done yet')
 
@@ -597,7 +603,9 @@ class DHESN(LayeredESN):
                     S_i /= res_std
                     # encoder.train_full(Variable(th.FloatTensor(S_i)))
                     # S_i = encode.encode(S_i).data().numpy()
-                    encoder.train_full(th.FloatTensor(S_i))
+                    S_i_train = np.array(S_i[:-1000, :])
+                    S_i_test = np.array(S_i[-1000:, :])
+                    encoder.train_full(th.FloatTensor(S_i_train), th.FloatTensor(S_i_test))
                     S_i = np.array(encoder.encode(Variable(th.FloatTensor(S_i)))[0].data.numpy())
                     # S_i = encoder.encode(Variable(th.FloatTensor(S_i))).data.numpy()
                 # S_i += res_mean[:100]
@@ -722,7 +730,7 @@ class EESN_ENCODED(LayeredESN):
 
         for j in range(self.num_reservoirs):
             self.encoders.append(VAE(input_size=self.reservoir_sizes[j], latent_variable_size=self.dims_reduce[j],
-                                        epochs=2, batch_size=32))
+                                        epochs=self.train_epochs, batch_size=64))
 
         # signals of the encoders
         self.encoder_signals = [[] for _ in range(self.num_reservoirs)]
@@ -795,7 +803,10 @@ class EESN_ENCODED(LayeredESN):
 
             S_i -= res_mean
             S_i /= res_std
-            encoder.train_full(th.FloatTensor(S_i))
+            S_i_train = np.array(S_i[:-1000, :])
+            S_i_test = np.array(S_i[-1000:, :])
+            encoder.train_full(th.FloatTensor(S_i_train), th.FloatTensor(S_i_test))
+            #encoder.train_full(th.FloatTensor(S_i))
             S_i = np.array(encoder.encode(Variable(th.FloatTensor(S_i)))[0].data.numpy())
 
             enc_mean = np.mean(S_i, axis=0)
