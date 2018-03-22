@@ -6,10 +6,7 @@ from Helper.utils import nrmse
 import pickle as pkl
 import itertools
 import time
-
-def mse(y1, y2):
-    return np.mean((y1 - y2)**2)
-                        
+ 
 if __name__ == '__main__':
     data = np.array([run(15100)]).reshape(-1, 1)
     data_mean = np.mean(data, axis=0)
