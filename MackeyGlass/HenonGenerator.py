@@ -9,13 +9,15 @@ import datetime
 alpha = 1.4
 beta = 0.3
 
-def runHenon(num_data_samples=5000, dimensions=2):
+def runHenon(num_data_samples=5000, dimensions=1):
 
     assert dimensions == 1 or dimensions == 2, "HENON MAP CAN ONLY be 1D or 2D"
 
         # move data
-    x_t = 0.1
-    y_t = 0.3
+    #x_t = 0.1
+    #y_t = 0.3
+    x_t = 0.0
+    y_t = 0.0
 
         # record timesteps
     sample_timer = 0
@@ -26,7 +28,7 @@ def runHenon(num_data_samples=5000, dimensions=2):
 
     data_samples = np.zeros((num_data_samples, dimensions))
 
-    init_period = 300
+    init_period = 2000
 
     while True:
 

@@ -59,9 +59,9 @@ class Reservoir(object):
         self.sparsity = None
 
         # helpful information to track
-        if self.debug:
-            self.signals = [] # <- reservoir states over time during training
-            self.num_to_store = 10
+        #if self.debug:
+        self.signals = [] # <- reservoir states over time during training
+        self.num_to_store = 50
         self.ins_init = False; self.res_init = False
 
     def info(self):
@@ -69,7 +69,7 @@ class Reservoir(object):
         out += 'W_res - spec_scale: %.2f, %s init\n' % (self.spectral_scale, self.W_res_init_strategy)
         out += 'W_in  -      scale: %.2f, %s init' % (self.input_weights_scale, self.W_in_init_strategy)
 
-    def initialize_input_weights(self, strategy='binary', scale=1e-2, offset=0.5):
+    def initialize_input_weights(self, strategy='binary', scale=1e-2, offset=0.5, sparsity=1.0):
         self.input_weights_scale = scale
         self.W_in_init_strategy = strategy
         if strategy == 'binary':
@@ -81,7 +81,11 @@ class Reservoir(object):
         else:
             raise ValueError('unknown input weight init strategy %s' % strategy)
 
+        self.sparsity_input = sparsity
+        sparsity_matrix = (np.random.rand(self.N, self.K) < self.sparsity_input).astype(float)
+
         self.W_in -= offset
+        self.W_in *= sparsity_matrix
         self.W_in *= self.input_weights_scale
         self.ins_init = True
 
@@ -102,9 +106,9 @@ class Reservoir(object):
         # apply the sparsity
         self.sparsity = sparsity
         sparsity_matrix = (np.random.rand(self.N, self.N) < self.sparsity).astype(float)
-        self.W_res *= sparsity_matrix
 
         self.W_res -= offset
+        self.W_res *= sparsity_matrix
         self.W_res /= max(abs(la.eig(self.W_res)[0]))
         self.W_res *= self.spectral_scale
         self.res_init = True
@@ -132,8 +136,8 @@ class Reservoir(object):
 
         # Equation (1) in "Formalism and Theory" of Scholarpedia page
         self.state = (1. - self.echo_param) * self.state + self.echo_param * self.activation(in_to_res + res_to_res)
-        if self.debug:
-            self.signals.append(self.state[:self.num_to_store].tolist())
+        #if self.debug:
+        self.signals.append(self.state[:self.num_to_store].tolist())
 
         return self.state.squeeze()
 
@@ -175,8 +179,8 @@ class ESN(object):
                 (r_size, e_prm, i_scl, s_scl, sp, reg)
         return out
 
-    def initialize_input_weights(self, strategy='binary', scale=1e-2):
-        self.reservoir.initialize_input_weights(strategy, scale)
+    def initialize_input_weights(self, strategy='binary', scale=1e-2, sparsity=1.0):
+        self.reservoir.initialize_input_weights(strategy, scale, sparsity=1.0)
 
     def initialize_reservoir_weights(self, strategy='uniform', spectral_scale=1.0, offset=0.5, 
                                      sparsity=1.0):
@@ -414,21 +418,41 @@ class DHESN(LayeredESN):
         self.dims_reduce = kwargs['dims_reduce']
         del kwargs['dims_reduce']
 
+        if 'train_epochs' not in kwargs.keys():
+            self.train_epochs = 2 # should make this specific to only VAEs but being quick for now
+        else:
+            self.train_epochs = kwargs['train_epochs']
+            del kwargs['train_epochs']
+
         if 'encoder_type' not in kwargs.keys():
             self.encoder_type = 'PCA'
         else:
             self.encoder_type = kwargs['encoder_type']
             del kwargs['encoder_type']
+
+        if 'encode_norm' not in kwargs.keys():
+            self.encode_norm = False # similar to batch norm (without trained std/mean) - we normalise AFTER the encoding
+        else:
+            self.encode_norm = kwargs['encode_norm']
+            del kwargs['encode_norm']
         
         super(DHESN, self).__init__(*args, **kwargs)
         
         # print(self.dims_reduce)
         self.data_mean = None
+        # normalisation data for reservoir outputs
         self.reservoir_means = [
             np.zeros(N_i) for N_i in self.reservoir_sizes
         ]
         self.reservoir_stds = [
             np.zeros(N_i) for N_i in self.reservoir_sizes
+        ]
+        # normalisation data for encoder outputs
+        self.encoder_means = [
+            np.zeros(N_i) for N_i in self.dims_reduce
+        ]
+        self.encoder_stds = [
+            np.zeros(N_i) for N_i in self.dims_reduce
         ]
 
         self.encoders = []
@@ -443,6 +467,9 @@ class DHESN(LayeredESN):
                                             epochs=2, batch_size=32))
         else:
             raise NotImplementedError('non-PCA/VAE encodings not done yet')
+
+        # signals of the encoders
+        self.encoder_signals = [[] for _ in range(self.num_reservoirs-1)]
 
     def __reservoir_input_size_rule__(self, reservoir_sizes, echo_params, activation):
         self.reservoirs.append(Reservoir(self.K, reservoir_sizes[0], echo_params[0],
@@ -467,14 +494,27 @@ class DHESN(LayeredESN):
             # u_n -= self.reservoir_means[i]
 
             if self.encoder_type == 'PCA':
+                # normalising prior to PCA could be good of bad (https://stats.stackexchange.com/questions/69157/why-do-we-need-to-normalize-data-before-principal-component-analysis-pca)
+                #u_n -= self.reservoir_means[i]
+                #u_n /= self.reservoir_stds[i]
                 u_n = encoder.transform(u_n.reshape(1, -1)).squeeze()
             elif self.encoder_type == 'VAE':
-                # print(u_n[:3])
+                # we must normalise the input prior to VAE input
                 u_n -= self.reservoir_means[i]
-                # print(u_n[:3])
-                # print("="*10)
                 u_n /= self.reservoir_stds[i]
                 u_n = encoder.encode(Variable(th.FloatTensor(u_n)))[0].data.numpy()
+
+            # normalise the outputs of the encoders
+            if self.encode_norm:
+                #print(np.shape(u_n))
+                #print(np.shape(self.encoder_means[i]))
+                #print(np.shape(self.encoder_stds[i]))
+                u_n = np.array((u_n - self.encoder_means[i])/self.encoder_stds[i])
+                #u_n -= self.encoder_means[i]
+                #u_n /= self.encoder_stds[i]
+
+            # store the encoded signals of each encoder
+            self.encoder_signals[i].append(u_n.tolist())
 
             x_n = np.append(x_n, u_n)
 
@@ -548,7 +588,7 @@ class DHESN(LayeredESN):
                 # Now train the encoder using the gathered state data
                 if self.encoder_type == 'PCA':
                     encoder.fit(S_i)  # sklearn PCA automatically zero-means the data
-                    S_i = encoder.transform(S_i)
+                    S_i = np.array(encoder.transform(S_i))
                 elif self.encoder_type == 'VAE':
                     # print(S_i[:3])
                     S_i -= res_mean
@@ -558,9 +598,15 @@ class DHESN(LayeredESN):
                     # encoder.train_full(Variable(th.FloatTensor(S_i)))
                     # S_i = encode.encode(S_i).data().numpy()
                     encoder.train_full(th.FloatTensor(S_i))
-                    S_i = encoder.encode(Variable(th.FloatTensor(S_i)))[0].data.numpy()
+                    S_i = np.array(encoder.encode(Variable(th.FloatTensor(S_i)))[0].data.numpy())
                     # S_i = encoder.encode(Variable(th.FloatTensor(S_i))).data.numpy()
                 # S_i += res_mean[:100]
+
+                # compute the mean output of the encoders
+                enc_mean = np.mean(S_i, axis=0)
+                enc_std = np.std(S_i, axis=0)+1e-8
+                self.encoder_means[i] = np.array(enc_mean) # this would be ~0 anyway because we normalise prior to encoding (but still...)
+                self.encoder_stds[i] = np.array(enc_std)
 
             # first few are for the next burn-in
             burn_in = S_i[:self.init_echo_timesteps, :]
@@ -640,6 +686,140 @@ class EESN(LayeredESN):
             x_n = np.append(x_n, output)
 
         return x_n
+
+class EESN_ENCODED(LayeredESN):
+
+    def __init__(self, *args, **kwargs):
+        assert 'dims_reduce' in kwargs.keys() or kwargs['dims_reduce'] is list, "MUST UNCLUDE DIMS AS LIST."
+        self.dims_reduce = kwargs['dims_reduce']
+        del kwargs['dims_reduce']
+
+        if 'train_epochs' not in kwargs.keys():
+            self.train_epochs = 2 # should make this specific to only VAEs but being quick for now
+        else:
+            self.train_epochs = kwargs['train_epochs']
+            del kwargs['train_epochs']
+
+        super(EESN_ENCODED, self).__init__(*args, **kwargs)
+        
+        self.data_mean = None
+        # normalisation data for reservoir outputs
+        self.reservoir_means = [
+            np.zeros(N_i) for N_i in self.reservoir_sizes
+        ]
+        self.reservoir_stds = [
+            np.zeros(N_i) for N_i in self.reservoir_sizes
+        ]
+        # normalisation data for encoder outputs
+        self.encoder_means = [
+            np.zeros(N_i) for N_i in self.dims_reduce
+        ]
+        self.encoder_stds = [
+            np.zeros(N_i) for N_i in self.dims_reduce
+        ]
+
+        self.encoders = []
+
+        for j in range(self.num_reservoirs):
+            self.encoders.append(VAE(input_size=self.reservoir_sizes[j], latent_variable_size=self.dims_reduce[j],
+                                        epochs=2, batch_size=32))
+
+        # signals of the encoders
+        self.encoder_signals = [[] for _ in range(self.num_reservoirs)]
+
+
+    def __reservoir_input_size_rule__(self, reservoir_sizes, echo_params, activation):
+        """
+        Set up the reservoirs so that they all take the input signal as input.
+        """
+        for i, (size, echo_prm) in enumerate(zip(reservoir_sizes, echo_params)):
+            self.reservoirs.append(Reservoir(
+                input_size=self.K, num_units=size, echo_param=echo_prm,
+                idx=i, activation=activation, debug=self.debug
+            ))
+    def __forward_routing_rule__(self, u_n):
+        x_n = np.zeros(0)
+
+        for i, (reservoir, encoder) in enumerate(zip(self.reservoirs, self.encoders)):
+            output = np.array(reservoir.forward(u_n))
+            output -= self.reservoir_means[i]
+            output /= self.reservoir_stds[i]
+            output = np.array(encoder.encode(Variable(th.FloatTensor(output)))[0].data.numpy())
+
+            # store the encoded signals of each encoder
+            self.encoder_signals[i].append(output.tolist())
+
+            x_n = np.append(x_n, output)
+
+        return x_n
+
+    def train(self, X, y, debug_info=False, add_bias=True):
+        """ (needs different train() because reservoirs+encoders have to be warmed up+trained one at a time."""
+        assert X.shape[1] == self.K, "Training data has unexpected dimensionality (%s). K = %d." % (X.shape, self.K)
+        X = X.reshape(-1, self.K)
+        y = y.reshape(-1, self.L)
+        self.data_mean = np.mean(X, axis=0)[0]
+
+        T = len(X) - self.init_echo_timesteps
+        S = np.zeros((T, np.sum(self.dims_reduce)+self.K))
+        S[:, -self.K:] = X[self.init_echo_timesteps:]
+        delim = np.array([0]+self.dims_reduce)
+        for i in range(1, len(delim)):
+            delim[i] += delim[i-1]
+            
+        burn_in = X[:self.init_echo_timesteps] # feed a unique input set to all reservoirs
+        inputs = X[self.init_echo_timesteps:]
+        # Now send data into each reservoir one at a time,
+        #   and train each encoder one at a time
+        for i in range(self.num_reservoirs):
+            reservoir = self.reservoirs[i]
+            # burn-in period (init echo timesteps) ===============================================
+            for u_n in burn_in:
+                _ = reservoir.forward(u_n)
+            # ==================
+
+            N_i = reservoir.N
+            S_i = np.zeros((np.shape(inputs)[0], N_i))  # reservoir i's states over T timesteps
+
+            # Now collect the real state data for encoders to train on
+            for n, u_n in enumerate(inputs):
+                S_i[n, :] = reservoir.forward(u_n)
+
+            # All reservoirs except the last output into an autoencoder
+            encoder = self.encoders[i]
+            res_mean = np.mean(S_i, axis=0)
+            res_std = np.std(S_i, axis=0) + 1e-8
+
+            self.reservoir_means[i] = res_mean
+            self.reservoir_stds[i] = res_std
+
+            S_i -= res_mean
+            S_i /= res_std
+            encoder.train_full(th.FloatTensor(S_i))
+            S_i = np.array(encoder.encode(Variable(th.FloatTensor(S_i)))[0].data.numpy())
+
+            enc_mean = np.mean(S_i, axis=0)
+            enc_std = np.std(S_i, axis=0)+1e-8
+            self.encoder_means[i] = np.array(enc_mean) # this would be ~0 anyway because we normalise prior to encoding (but still...)
+            self.encoder_stds[i] = np.array(enc_std)
+
+            lb, ub = delim[i], delim[i+1]
+            S[:, lb:ub] = np.array(S_i)
+
+            # inputs = S_i
+            
+            if debug_info:
+                print('res %d mean state magnitude: %.4f' % (i, np.mean(np.abs(S_i))))
+
+        if add_bias:
+            S = np.hstack([S, np.ones((S.shape[0], 1))])
+
+        D = y[self.init_echo_timesteps:]
+        # Solve linear system
+        T1 = np.dot(D.T, S)
+        # T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye(self.K + self.N))
+        T2 = la.inv(np.dot(S.T, S) + self.regulariser * np.eye(np.sum(self.dims_reduce)+self.K+1))
+        self.W_out = np.dot(T1, T2)
 
 
 class ESN2(object):
