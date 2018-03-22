@@ -24,11 +24,11 @@ def resetHistory():
 def addToHistory(x):
     x_history.append(x)
 
-def run(num_data_samples=5000):
+def run(num_data_samples=5000, init_x=1.0, init_x_tau=0.0):
     resetHistory()
         # move data
-    x_pos = 1.0
-    x_pos_tau = 0.0
+    x_pos = init_x
+    x_pos_tau = init_x_tau
 
         # record timesteps
     sample_timer = 0
