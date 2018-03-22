@@ -16,11 +16,15 @@ tau = 17
 en = 10.
 
 x_history = deque(maxlen=tau)
+print("hello")
+def resetHistory():
+    x_history = deque(maxlen=tau)
 
 def addToHistory(x):
     x_history.append(x)
 
 def run(num_data_samples=5000):
+    resetHistory()
         # move data
     x_pos = 1.0
     x_pos_tau = 0.0

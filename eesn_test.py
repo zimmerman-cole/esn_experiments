@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from ESN.ESN import LCESN, EESN, ESN, DHESN
-from MackeyGlass.MackeyGlassGenerator import run
+from MackeyGlass.HenonGenerator import runHenon
 
 from Helper.utils import nrmse
 
@@ -19,7 +19,7 @@ def save_data(file_name, data_csv, delimiter, fmt, header):
 
 
 if __name__ == '__main__':
-    data = np.  array([run(15100)]).reshape(-1, 1)
+    data = np.  array([runHenon(15100, dimensions=1)]).reshape(-1, 1)
     # NOTE: REMOVE WHEN NOT DHESN
     _std = np.std(data)
     #data -= np.mean(data)
@@ -72,17 +72,17 @@ if __name__ == '__main__':
     # nrmse_err = nrmse(y_vals, eesn_outputs, MEAN_OF_DATA)
     # print('EESN NRMSE: %f' % nrmse_err)
 
-    EXPERIMENT_NAME = "VARIOUS_DHESN_WITH_VAE_GRID_SEARCH_3_"
+    EXPERIMENT_NAME = "HENON_DHESN_WITH_PCA_GRID_SEARCH_3_"
     file_name = 'DHESN_RESULTS/DHESN_data_{}_{}.csv'.format(EXPERIMENT_NAME, datetime.date.today())
 
-    res_ranges = [(100, 500), (500, 100), (300, 300)]
-    echo_ranges = [(0.85, 0.1), (0.5, 0.1), (0.1, 0.8), (0.4, 0.4)]
-    weightin_ranges = [(1.0, 0.5), (0.5, 1.0), (0.5, 0.5)]
-    spect_ranges = [(0.4, 1.2), (1.2, 0.4), (0.3, 0.9), (0.9, 0.3)]
-    d_reduce_ranges = [(60, 60), (100, 10), (10, 100)]
+    res_ranges = [(100, 500), (200, 400), (300, 300)]
+    echo_ranges = [(0.8, 0.5), (0.5, 0.1)]
+    weightin_ranges = [(1.0, 0.5), (0.5, 0.5)]
+    spect_ranges = [(0.4, 1.2), (1.2, 0.4), (1.0, 0.7)]
+    d_reduce_ranges = [(60, 60), (10, 100), (30, 80)]
     res_number_ranges = [8]
     regs = [1e-2, 1e-6]
-    train_epochs = [2, 4]
+    train_epochs = [2]
     # num_res = 20
     # reg = 1e-6
 
@@ -131,33 +131,33 @@ if __name__ == '__main__':
                                         # # print(range(10, 100, n-1)[::-1])
                                         # print("EXPERIMENT: \n\tRES: {}, \n\tECH: {}, \n\tSPEC: {}, \n\tWEIGHTIN: {}, \n\tDIMREDUC: {}, \n\tREG: {}".format(
                                         #                 _reservoirs, _echoes, _spectrals, _weightins, _dimsreduce, reg))
-                                        eesn = DHESN(1, 1, n,
-                                                    reservoir_sizes=_reservoirs, 
-                                                    echo_params=_echoes, 
-                                                    regulariser=reg, debug=True,
-                                                    # activation=(lambda x: x*(x>0).astype(float)),
-                                                    # activation=(lambda x: x),
-                                                    init_echo_timesteps=100, dims_reduce=_dimsreduce,
-                                                    # init_echo_timesteps=100, dims_reduce=(np.linspace(50, 200, n-1).astype(int).tolist()),
-                                                    encoder_type='VAE', train_epochs=t)
-                                        eesn.initialize_input_weights(scales=_weightins, strategies='uniform')
-                                        eesn.initialize_reservoir_weights(
-                                                    spectral_scales=_spectrals,
-                                                    strategies=['uniform']*n,
-                                                    sparsity=0.1
-                                                    )
-                                        #eesn = ESN(1, 1, reservoir_size=1000,
-                                                     #echo_param=0.85,
-                                                     #regulariser=1e-5, debug=True,
+                                        #eesn = DHESN(1, 1, n,
+                                                    #reservoir_sizes=_reservoirs, 
+                                                    #echo_params=_echoes, 
+                                                    #regulariser=reg, debug=True,
+                                                    ## activation=(lambda x: x*(x>0).astype(float)),
+                                                    ## activation=(lambda x: x),
+                                                    #init_echo_timesteps=100, dims_reduce=_dimsreduce,
+                                                    ## init_echo_timesteps=100, dims_reduce=(np.linspace(50, 200, n-1).astype(int).tolist()),
+                                                    #encoder_type='PCA')#, train_epochs=t)
+                                        #eesn.initialize_input_weights(scales=_weightins, strategies='uniform')
+                                        #eesn.initialize_reservoir_weights(
+                                                    #spectral_scales=_spectrals,
+                                                    #strategies=['uniform']*n,
+                                                    #sparsity=0.1
+                                                    #)
+                                        eesn = ESN(1, 1, reservoir_size=1000,
+                                                     echo_param=0.2,
+                                                     regulariser=1e-5, debug=False,
                                                      # activation=(lambda x: x*(x>0).astype(float)),
                                                      # activation=(lambda x: x),
-                                                     #init_echo_timesteps=100)
+                                                     init_echo_timesteps=100)
                                                      # init_echo_timesteps=100, dims_reduce=(np.linspace(50, 200, n-1).astype(int).tolist()),
-                                        #eesn.initialize_input_weights(scale=1.0)
+                                        eesn.initialize_input_weights(scale=.5)
                                          #eesn.reservoir.W_in[:, -1] += MEAN_OF_DATA
-                                        #eesn.initialize_reservoir_weights(
-                                                     #spectral_scale=1.25,
-                                                     #sparsity=1.0)
+                                        eesn.initialize_reservoir_weights(
+                                                     spectral_scale=5.5,
+                                                     sparsity=.1)
                                         eesn.train(X_train, y_train)
 
                                         eesn_outputs = []
