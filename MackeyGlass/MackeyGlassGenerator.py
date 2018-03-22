@@ -18,7 +18,8 @@ en = 10.
 x_history = deque(maxlen=tau)
 print("hello")
 def resetHistory():
-    x_history = deque(maxlen=tau)
+    x_history.clear()
+    #x_history = deque(maxlen=tau)
 
 def addToHistory(x):
     x_history.append(x)
@@ -74,7 +75,7 @@ def onExit(data, plot2d=False):
         plt.show()
 
 def d_x(x_t, x_t_tau):
-    return beta * (x_t_tau/(1+pow(x_t_tau, en))) - gamma * x_t
+    return beta * (x_t_tau/(1.+pow(x_t_tau, en))) - gamma * x_t
 
 if __name__ == "__main__":
     data = run(num_data_samples=8000)
