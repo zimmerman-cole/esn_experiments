@@ -83,9 +83,9 @@ class Reservoir(object):
 
         self.sparsity_input = sparsity
         sparsity_matrix = (np.random.rand(self.N, self.K) < self.sparsity_input).astype(float)
-        self.W_res *= sparsity_matrix
 
         self.W_in -= offset
+        self.W_in *= sparsity_matrix
         self.W_in *= self.input_weights_scale
         self.ins_init = True
 
@@ -106,9 +106,9 @@ class Reservoir(object):
         # apply the sparsity
         self.sparsity = sparsity
         sparsity_matrix = (np.random.rand(self.N, self.N) < self.sparsity).astype(float)
-        self.W_res *= sparsity_matrix
 
         self.W_res -= offset
+        self.W_res *= sparsity_matrix
         self.W_res /= max(abs(la.eig(self.W_res)[0]))
         self.W_res *= self.spectral_scale
         self.res_init = True
