@@ -316,16 +316,22 @@ class LayeredESN(object):
         for i, (strat, scale) in enumerate(zip(strategies, scales)):
             self.reservoirs[i].initialize_input_weights(strategy=strat, scale=scale, sparsity=sparsity)
 
-    def initialize_reservoir_weights(self, strategies='uniform', spectral_scales=1.0, offsets=0.5, sparsity=1.0):
+    def initialize_reservoir_weights(self, strategies='uniform', spectral_scales=1.0, offsets=0.5, sparsity=1.0, sparsities=None):
         if type(strategies) not in [list, np.ndarray]:
             strategies = [strategies]*self.num_reservoirs
         if type(spectral_scales) not in [list, np.ndarray]:
             spectral_scales = [spectral_scales]*self.num_reservoirs
         if type(offsets) not in [list, np.ndarray]:
             offsets = [offsets]*self.num_reservoirs
+        if sparsities is not None:
+            assert len(sparsities) == self.num_reservoirs
+        else:
+            sparsities = [sparsity]*self.num_reservoirs
 
-        for i, (strat, scale, offset) in enumerate(zip(strategies, spectral_scales, offsets)):
-            self.reservoirs[i].initialize_reservoir_weights(strat, scale, offset, sparsity=sparsity)
+        for i, (strat, scale, offset, sp) in enumerate(
+            zip(strategies, spectral_scales, offsets, sparsities)
+        ):
+            self.reservoirs[i].initialize_reservoir_weights(strat, scale, offset, sparsity=sp)
 
     @abstractmethod
     def __forward_routing_rule__(self, u_n):
@@ -405,10 +411,11 @@ class LayeredESN(object):
         inp_scales = [r.input_weights_scale for r in self.reservoirs]
         spec_scales = [r.spectral_scale for r in self.reservoirs]
         echo_prms = [r.echo_param for r in self.reservoirs]
+        sps = [r.sparsity for r in self.reservoirs]
         out = """
         num_res: %d\nres_sizes:%s\necho_params:%s\ninput_scales:%s\nspectral_scales:%s
         """ % (self.num_reservoirs, self.reservoir_sizes, echo_prms, inp_scales, spec_scales)
-        out += 'regulariser: %f' % self.regulariser
+        out += 'sparsities:%s\nregulariser: %f' % (sps, self.regulariser)
         return out
 
 class DHESN(LayeredESN):

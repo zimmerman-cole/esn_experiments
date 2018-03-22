@@ -50,7 +50,7 @@ def run(num_data_samples=5000, init_x=1.0, init_x_tau=0.0):
             data_samples.append(x_pos)
             current_sample += 1
             if current_sample >= num_data_samples:
-                print("DONE")
+                #print("DONE")
                 return data_samples
 
         # record move history
