@@ -411,7 +411,7 @@ class LayeredESN(object):
         inp_scales = [r.input_weights_scale for r in self.reservoirs]
         spec_scales = [r.spectral_scale for r in self.reservoirs]
         echo_prms = [r.echo_param for r in self.reservoirs]
-        sps = [r.sparsity for in self.reservoirs)
+        sps = [r.sparsity for r in self.reservoirs]
         out = """
         num_res: %d\nres_sizes:%s\necho_params:%s\ninput_scales:%s\nspectral_scales:%s
         """ % (self.num_reservoirs, self.reservoir_sizes, echo_prms, inp_scales, spec_scales)
