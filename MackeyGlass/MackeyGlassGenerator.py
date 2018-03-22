@@ -44,7 +44,7 @@ def run(num_data_samples=5000):
             data_samples.append(x_pos)
             current_sample += 1
             if current_sample >= num_data_samples:
-                print("DONE")
+                #print("DONE")
                 return data_samples
 
         # record move history
