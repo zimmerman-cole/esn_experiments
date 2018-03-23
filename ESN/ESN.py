@@ -477,7 +477,8 @@ class DHESN(LayeredESN):
         elif self.encoder_type == 'VAE':
             for j in range(1, self.num_reservoirs):
                 self.encoders.append(VAE(input_size=self.reservoir_sizes[j-1], latent_variable_size=self.dims_reduce[j-1],
-                                            epochs=self.train_epochs*j, batch_size=self.train_batches))
+                                            epochs=self.train_epochs, batch_size=self.train_batches))
+                                            # epochs=self.train_epochs*j, batch_size=self.train_batches))
         else:
             raise NotImplementedError('non-PCA/VAE encodings not done yet')
 

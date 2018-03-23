@@ -43,7 +43,7 @@ import numpy as np
 
 class VAE(nn.Module):
     def __init__(self, input_size, hidden_size=None, latent_variable_size=5,
-                    log_interval=2, batch_size=128, epochs=3):
+                    log_interval=2, batch_size=32, epochs=3):
         super(VAE, self).__init__()
 
         self.input_size = input_size
@@ -67,7 +67,7 @@ class VAE(nn.Module):
         self.fc4 = nn.Linear(self.hidden_size, self.input_size)
 
         self.relu = nn.ReLU()
-        # self.relu = nn.Tanh()
+        self.tanh = nn.Tanh()
         self.sigmoid = nn.Sigmoid()
 
         self.optimizer = optim.Adam(self.parameters(), lr=1e-3)
@@ -98,6 +98,7 @@ class VAE(nn.Module):
 
     # Reconstruction + KL divergence losses summed over all elements and batch
     def loss_function(self, recon_x, x, mu, logvar):
+        # BCE = F.binary_cross_entropy(recon_x, x.view(-1, self.input_size), size_average=False)
         BCE = F.mse_loss(recon_x, x.view(-1, self.input_size), size_average=False)
 
         # see Appendix B from VAE paper:
@@ -141,16 +142,16 @@ class VAE(nn.Module):
             data = Variable(data, volatile=True)
             recon_batch, mu, logvar = self(data)
             test_loss += self.loss_function(recon_batch, data, mu, logvar).data[0]
-            #if i == 0:
-                #n = min(data.size(0), 8)
-                #comparison = torch.cat([data[:n],
-                                    #recon_batch.view(self.batch_size, 1, 28, 28)[:n]])
-                ##save_image(comparison.data,
-                        #'results/reconstruction_' + str(epoch_idx) + '.png', nrow=n)
+            # if i == 0:
+            #     n = min(data.size(0), 8)
+            #     comparison = torch.cat([data[:n],
+            #                         recon_batch.view(self.batch_size, 1, 28, 28)[:n]])
+            #     save_image(comparison.data,
+            #             'results/reconstruction_' + str(epoch_idx) + '.png', nrow=n)
 
         # test_loss /= len(self.test_data.dataset)
         test_loss /= len(test_data)
-        print('====> {} Test set loss: {:.4f}'.format(epoch_idx, test_loss))
+        # print('====> {} Test set loss: {:.4f}'.format(epoch_idx, test_loss))
     
     def train_full(self, train_data, test_data=None, verbose=False):
         # normalise the data before putting it into the ENCODER
@@ -163,7 +164,11 @@ class VAE(nn.Module):
         # train_data /= _std
 
         for epoch in range(1, self.epochs + 1):
-            self.train_one_epoch(epoch, train_data)
+            train_shuff = train_data[torch.randperm(train_data.shape[0]), :]
+            # print(train_data[:5, :5])
+            # print(train_shuff[:5, :5])
+
+            self.train_one_epoch(epoch, train_shuff)
             if test_data is not None:
                 self.test(epoch, test_data)
             self.sample()
