@@ -5,8 +5,8 @@ import pickle as pkl
 import datetime
 import time
 
-from ESN.ESN import LayeredESN, LCESN, EESN, ESN, DHESN
-from Helper.utils import nrmse, LivePlotHistogram, LiveDataGraph
+from ESN import LayeredESN, LCESN, EESN, ESN, DHESN
+from utils import nrmse, LivePlotHistogram, LiveDataGraph
 
 MAX_REWARD = 1000000
 

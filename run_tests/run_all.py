@@ -1,8 +1,7 @@
 import time
 import numpy as np
 import matplotlib.pyplot as plt
-from ESN.ESN import ESN2
-from ESN.ESN import ESN, LCESN, EESN
+from mylib.ESN import ESN, LCESN, EESN, ESN2
 from MackeyGlass.MackeyGlassGenerator import run, onExit
 
 def run_TESTS():
