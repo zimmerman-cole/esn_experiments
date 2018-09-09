@@ -1,6 +1,15 @@
+""" Cole - runs tests on multiple architectures using same generated time-series data. """
+
+# Add parent directory to path
+import os, sys, inspect
+currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+parentdir = os.path.dirname(currentdir)
+sys.path.insert(0,parentdir) 
+
 import time
 import numpy as np
 import matplotlib.pyplot as plt
+
 from mylib.ESN import ESN, LCESN, EESN, ESN2
 from MackeyGlass.MackeyGlassGenerator import run, onExit
 

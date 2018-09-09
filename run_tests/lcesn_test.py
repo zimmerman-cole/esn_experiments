@@ -1,11 +1,20 @@
+""" Cole. Script runs tests on the 'layered-constrained' ESN. """
+
+# Add parent directory to path
+import os, sys, inspect
+currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+parentdir = os.path.dirname(currentdir)
+sys.path.insert(0,parentdir) 
+
 import numpy as np
 import matplotlib.pyplot as plt
-from ESN.ESN import LCESN, ESN, EESN
-from MackeyGlass.MackeyGlassGenerator import run
-from Helper.utils import nrmse
 import pickle as pkl
 import itertools
 import time
+
+from mylib.ESN import LCESN, ESN, EESN
+from MackeyGlass.MackeyGlassGenerator import run
+from mylib.utils import nrmse
 
 def mse(y1, y2):
     return np.mean((y1 - y2)**2)
@@ -119,4 +128,4 @@ if __name__ == '__main__':
                 ax.bar(range(len(w)), w)
                 plt.show()
 
-            pkl.dump(to_save, open('Results/LCESN/%s.p' % title, 'wb'))
+            pkl.dump(to_save, open('../Results/LCESN/%s.p' % title, 'wb'))
