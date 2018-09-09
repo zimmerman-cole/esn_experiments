@@ -1,3 +1,0 @@
-S'Total run time mins: 55.0843001842.'
-p0
-.
