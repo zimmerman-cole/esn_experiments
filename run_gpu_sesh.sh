@@ -7,6 +7,8 @@
 #SBATCH -e errfile  # send stderr to errfile
 #SBATCH -t 8:00:00  # time requested in hour:minute:seconds
 
+# Bash script for running our experiments on GPUs
+
 # Setup CUDA and CUDNN related paths
 export CUDA_HOME=/opt/cuda-8.0.44
 
